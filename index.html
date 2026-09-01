@@ -125,11 +125,10 @@
             <div class="mb-4">
                 <h3 class="text-sm font-semibold text-zinc-400 mb-2">Áudio a compartilhar</h3>
                 <div class="flex gap-2" id="audio-mode-options">
-                    <button type="button" data-mode="mic" class="audio-mode-btn active-mode"><i class="ph ph-microphone block mb-1"></i>Microfone</button>
                     <button type="button" data-mode="system" class="audio-mode-btn"><i class="ph ph-speaker-high block mb-1"></i>Áudio do Sistema</button>
-                    <button type="button" data-mode="none" class="audio-mode-btn"><i class="ph ph-speaker-slash block mb-1"></i>Sem Áudio</button>
+                    <button type="button" data-mode="none" class="audio-mode-btn active-mode"><i class="ph ph-speaker-slash block mb-1"></i>Sem Áudio</button>
                 </div>
-                <p class="text-xs text-zinc-500 mt-2">"Microfone" transmite só a sua voz e não pega o som do Discord ou de outros apps. "Áudio do Sistema" captura tudo que estiver tocando no PC, incluindo o Discord.</p>
+                <p class="text-xs text-zinc-500 mt-2">Seu microfone já é transmitido pelo chat de voz da sala. Aqui você escolhe se quer compartilhar também o áudio do sistema (jogos, vídeos, música, etc.) junto com a tela.</p>
             </div>
 
             <div id="sources-list" class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto p-2"></div>
@@ -148,6 +147,9 @@
             <div id="quality-current-info" class="text-xs text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center gap-2"></div>
         </div>
     </div>
+
+    <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
+    <div id="voice-audio-container" style="display:none"></div>
 
     <!-- HEADER -->
     <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
@@ -191,13 +193,17 @@
     <!-- FOOTER -->
     <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
 
+        <button class="control-btn" id="btn-mic" title="Mutar/Ativar Microfone" style="width: 44px; height: 44px; font-size: 20px;">
+            <i class="ph ph-microphone text-xl"></i>
+        </button>
+
         <button class="control-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Compartilhar Tela"><i class="ph ph-screencast text-3xl"></i></button>
 
         <div class="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-4 py-1">
-            <button class="control-btn" id="btn-volume" title="Ativar/Desativar áudio das transmissões" style="width: 44px; height: 44px; font-size: 20px; background-color: #27272a; border-color: #3f3f46;">
+            <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)" style="width: 44px; height: 44px; font-size: 20px; background-color: #27272a; border-color: #3f3f46;">
                 <i class="ph ph-speaker-simple-slash text-xl"></i>
             </button>
-            <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume das transmissões">
+            <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)">
         </div>
 
         <button class="control-btn" id="btn-quality" title="Qualidade de Vídeo">
@@ -247,7 +253,7 @@
             let isSharing = false;
             let localStream = null;
             let currentRoom = null;
-            let selectedAudioMode = 'mic';
+            let selectedAudioMode = 'none';
 
             // ==========================================
             // QUALIDADE DE VÍDEO (MANUAL OU AUTOMÁTICA)
@@ -284,6 +290,148 @@
             // Player começa mutado, volume "cheio" quando ativado
             let isMuted = true;
             let masterVolume = 1.0;
+
+            // ==========================================
+            // CHAT DE VOZ (MALHA DE ÁUDIO ENTRE TODOS DA SALA)
+            // ==========================================
+            const voicePeers = {}; // peerId -> RTCPeerConnection (mic bidirecional)
+            const perUserMuted = new Set(); // peerIds que eu silenciei manualmente
+            let micStream = null;
+            let isMicMuted = false;
+
+            async function ensureMicStream() {
+                if (micStream) return micStream;
+                try {
+                    micStream = await navigator.mediaDevices.getUserMedia({
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
+                    micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+                    return micStream;
+                } catch (err) {
+                    console.error(err);
+                    showToast('Aviso', 'Não foi possível acessar o microfone para o chat de voz.', 'error');
+                    return null;
+                }
+            }
+
+            function createVoicePeer(peerId) {
+                if (voicePeers[peerId]) {
+                    voicePeers[peerId].close();
+                    delete voicePeers[peerId];
+                }
+                const pc = new RTCPeerConnection(config);
+                voicePeers[peerId] = pc;
+
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        socket.emit('ice-candidate', {
+                            target: peerId,
+                            sender: socket.id,
+                            candidate: Object.assign(e.candidate.toJSON(), { kind: 'voice' })
+                        });
+                    }
+                };
+
+                if (micStream) {
+                    micStream.getAudioTracks().forEach(t => pc.addTrack(t, micStream));
+                } else {
+                    pc.addTransceiver('audio', { direction: 'recvonly' });
+                }
+
+                pc.ontrack = (e) => attachVoiceAudio(peerId, e.streams[0]);
+
+                return pc;
+            }
+
+            async function initiateVoiceCall(peerId) {
+                await ensureMicStream();
+                const pc = createVoicePeer(peerId);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('offer', {
+                    target: peerId,
+                    caller: socket.id,
+                    sdp: { type: offer.type, sdp: offer.sdp, kind: 'voice' }
+                });
+            }
+
+            async function handleVoiceOffer(callerId, sdp) {
+                await ensureMicStream();
+                const pc = createVoicePeer(callerId);
+                await pc.setRemoteDescription(sdp);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit('answer', {
+                    target: callerId,
+                    answerer: socket.id,
+                    sdp: { type: answer.type, sdp: answer.sdp, kind: 'voice' }
+                });
+            }
+
+            async function handleVoiceAnswer(peerId, sdp) {
+                if (voicePeers[peerId]) await voicePeers[peerId].setRemoteDescription(sdp);
+            }
+
+            async function handleVoiceCandidate(peerId, candidate) {
+                const pc = voicePeers[peerId];
+                if (pc) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { /* ignora candidato tardio */ }
+                }
+            }
+
+            function attachVoiceAudio(peerId, stream) {
+                let audioEl = document.querySelector(`audio[data-voice-id="${peerId}"]`);
+                if (!audioEl) {
+                    audioEl = document.createElement('audio');
+                    audioEl.dataset.voiceId = peerId;
+                    audioEl.autoplay = true;
+                    document.getElementById('voice-audio-container').appendChild(audioEl);
+                }
+                audioEl.srcObject = stream;
+                audioEl.muted = isMuted || perUserMuted.has(peerId);
+                audioEl.volume = masterVolume;
+                audioEl.play().catch(() => {});
+            }
+
+            function removeVoiceAudio(peerId) {
+                const audioEl = document.querySelector(`audio[data-voice-id="${peerId}"]`);
+                if (audioEl) audioEl.remove();
+            }
+
+            function closeVoicePeer(peerId) {
+                if (voicePeers[peerId]) {
+                    voicePeers[peerId].close();
+                    delete voicePeers[peerId];
+                }
+                removeVoiceAudio(peerId);
+            }
+
+            function updateMicIcon() {
+                const btnMic = document.getElementById('btn-mic');
+                if (isMicMuted) {
+                    btnMic.innerHTML = '<i class="ph ph-microphone-slash text-xl"></i>';
+                    btnMic.classList.add('danger-state');
+                } else {
+                    btnMic.innerHTML = '<i class="ph ph-microphone text-xl"></i>';
+                    btnMic.classList.remove('danger-state');
+                }
+            }
+
+            document.getElementById('btn-mic').addEventListener('click', async () => {
+                isMicMuted = !isMicMuted;
+                if (!micStream && !isMicMuted) await ensureMicStream();
+                if (micStream) micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+                updateMicIcon();
+                showToast('Microfone', isMicMuted ? 'Seu microfone foi silenciado.' : 'Seu microfone foi ativado.');
+            });
+
+            function toggleUserMute(peerId) {
+                if (perUserMuted.has(peerId)) perUserMuted.delete(peerId);
+                else perUserMuted.add(peerId);
+                applyAudioToAllTiles();
+                updateUserList();
+            }
+            window.toggleUserMute = toggleUserMute;
 
             // ==========================================
             // TOAST & RELÓGIO
@@ -396,6 +544,10 @@
                     if (!v) return;
                     v.muted = isMuted;
                     v.volume = masterVolume;
+                });
+                document.querySelectorAll('#voice-audio-container audio').forEach(a => {
+                    a.muted = isMuted || perUserMuted.has(a.dataset.voiceId);
+                    a.volume = masterVolume;
                 });
             }
 
@@ -780,6 +932,14 @@
                     if (nameEl) nameEl.textContent = u.name;
                 });
 
+                // Chat de voz: conecta com todo mundo que ainda não está na malha.
+                // Regra determinística evita que os dois lados ofereçam ao mesmo tempo (glare).
+                users.forEach(u => {
+                    if (u.id === socket.id) return;
+                    if (voicePeers[u.id]) return;
+                    if (socket.id > u.id) initiateVoiceCall(u.id);
+                });
+
                 updateUserList();
             });
 
@@ -811,9 +971,18 @@
                         }
                     }
 
+                    let muteHtml = '';
+                    if (!isMe) {
+                        const muted = perUserMuted.has(u.id);
+                        muteHtml = `<button class="text-zinc-400 hover:text-white flex-shrink-0" onclick="window.toggleUserMute('${u.id}')" title="${muted ? 'Reativar áudio deste participante' : 'Silenciar este participante'}">
+                                        <i class="ph ${muted ? 'ph-speaker-simple-slash' : 'ph-speaker-simple-high'} text-sm"></i>
+                                     </button>`;
+                    }
+
                     div.innerHTML = `
                         <div class="w-8 h-8 rounded-full flex-shrink-0 ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
                         <span class="text-sm text-zinc-300 truncate flex-1">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
+                        ${muteHtml}
                         ${badgeHtml}
                     `;
 
@@ -842,9 +1011,18 @@
                 if (isSharing) createSenderOffer(viewerId);
             });
 
-            socket.on('offer', ({ caller, sdp }) => handleOffer({ caller, sdp }));
-            socket.on('answer', ({ answerer, sdp }) => handleAnswer({ answerer, sdp }));
-            socket.on('ice-candidate', ({ sender, candidate }) => handleCandidate({ sender, candidate }));
+            socket.on('offer', ({ caller, sdp }) => {
+                if (sdp && sdp.kind === 'voice') handleVoiceOffer(caller, sdp);
+                else handleOffer({ caller, sdp });
+            });
+            socket.on('answer', ({ answerer, sdp }) => {
+                if (sdp && sdp.kind === 'voice') handleVoiceAnswer(answerer, sdp);
+                else handleAnswer({ answerer, sdp });
+            });
+            socket.on('ice-candidate', ({ sender, candidate }) => {
+                if (candidate && candidate.kind === 'voice') handleVoiceCandidate(sender, candidate);
+                else handleCandidate({ sender, candidate });
+            });
 
             socket.on('user-disconnected', (userId) => {
                 if (viewerPeers[userId]) {
@@ -855,6 +1033,8 @@
                     senderPeers[userId].close();
                     delete senderPeers[userId];
                 }
+                closeVoicePeer(userId);
+                perUserMuted.delete(userId);
                 if (selectedStreamers.has(userId)) unwatchStreamer(userId);
             });
 
@@ -883,11 +1063,16 @@
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
+                Object.values(voicePeers).forEach(pc => pc.close());
+                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
+                document.getElementById('voice-audio-container').innerHTML = '';
+                perUserMuted.clear();
                 selectedStreamers.clear();
                 videoGrid.innerHTML = '';
                 updateGridLayout();
 
                 socket.emit('join-room', { roomId: currentRoom, username: myUsername });
+                ensureMicStream().then(() => updateMicIcon());
             });
 
             // ==========================================
@@ -983,24 +1168,11 @@
                     videoTrack.contentHint = 'detail'; // prioriza nitidez de texto/detalhe sobre fluidez
                     const videoSettings = videoTrack.getSettings();
 
-                    let audioTracks = capturedStream.getAudioTracks();
-
-                    if (audioMode === 'mic') {
-                        try {
-                            const micStream = await navigator.mediaDevices.getUserMedia({
-                                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-                            });
-                            audioTracks = micStream.getAudioTracks();
-                        } catch (micErr) {
-                            console.error(micErr);
-                            showToast('Aviso', 'Não foi possível acessar o microfone. Transmitindo sem áudio.', 'error');
-                            audioTracks = [];
-                        }
-                    }
+                    const audioTracks = capturedStream.getAudioTracks();
 
                     localStream = new MediaStream([videoTrack, ...audioTracks]);
 
-                    const audioLabel = audioMode === 'mic' ? ' + microfone' : (audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)');
+                    const audioLabel = audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)';
                     onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`);
                 } catch (err) {
                     console.error(err);
@@ -1045,6 +1217,10 @@
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
+                Object.values(voicePeers).forEach(pc => pc.close());
+                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
+                document.getElementById('voice-audio-container').innerHTML = '';
+                perUserMuted.clear();
                 selectedStreamers.clear();
 
                 videoGrid.innerHTML = '';
