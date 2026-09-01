@@ -131,7 +131,7 @@
                 <p class="text-xs text-zinc-500 mt-2">Seu microfone já é transmitido pelo chat de voz da sala. Aqui você escolhe se quer compartilhar também o áudio do sistema (jogos, vídeos, música, etc.) junto com a tela.</p>
                 <p id="system-audio-warning" class="text-xs text-yellow-500 mt-2 hidden bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 flex items-start gap-2">
                     <i class="ph ph-warning-circle text-sm mt-0.5 flex-shrink-0"></i>
-                    <span>Atenção: "Áudio do Sistema" captura tudo que toca no seu PC, incluindo as vozes do chat de voz. Quem estiver assistindo pode se ouvir de volta (eco). Se não precisa compartilhar som de jogo/vídeo, deixe em "Sem Áudio".</span>
+                    <span>"Áudio do Sistema" captura tudo que toca no seu PC. Pra evitar eco/vozes duplicadas pra quem assiste, o app vai silenciar automaticamente o que <strong>você</strong> ouve dos outros enquanto isso estiver ligado (seu microfone continua normal, todo mundo continua te ouvindo).</span>
                 </p>
             </div>
 
@@ -258,6 +258,7 @@
             let localStream = null;
             let currentRoom = null;
             let selectedAudioMode = 'none';
+            let mutedBeforeSystemShare = null; // guarda o estado de mudo de antes, pra restaurar depois
 
             // ==========================================
             // QUALIDADE DE VÍDEO (MANUAL OU AUTOMÁTICA)
@@ -1118,7 +1119,7 @@
                 screenModal.classList.remove('flex');
             });
 
-            function onShareStarted(settingsLabel) {
+            function onShareStarted(settingsLabel, audioMode) {
                 isSharing = true;
                 if (selectedQualityMode === 'auto') autoTierIndex = AUTO_START_TIER_INDEX;
                 lastQualityChangeAt = Date.now();
@@ -1128,6 +1129,22 @@
                 btnShare.classList.remove('bg-blue-600', 'border-blue-500');
                 btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
                 showToast('Compartilhando', settingsLabel);
+
+                // Compartilhando áudio do sistema: o que você ouve tocaria de volta pro
+                // seu PC e vazaria pra captura de áudio, causando eco/vozes duplicadas
+                // pra quem está assistindo. Então silenciamos só o seu lado (seu mic
+                // continua normal) enquanto isso estiver ligado.
+                if (audioMode === 'system') {
+                    mutedBeforeSystemShare = isMuted;
+                    if (!isMuted) {
+                        isMuted = true;
+                        updateVolumeIcon();
+                        applyAudioToAllTiles();
+                    }
+                    showToast('Áudio', 'Como você está compartilhando o áudio do sistema, silenciamos o que você ouve dos outros pra evitar eco. Seu microfone continua normal.', 'info');
+                } else {
+                    mutedBeforeSystemShare = null;
+                }
 
                 socket.emit('start-sharing');
                 localStream.getVideoTracks()[0].onended = stopScreenShare;
@@ -1178,7 +1195,7 @@
                     localStream = new MediaStream([videoTrack, ...audioTracks]);
 
                     const audioLabel = audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)';
-                    onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`);
+                    onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`, audioMode);
                 } catch (err) {
                     console.error(err);
                     showToast('Erro', 'Falha ao capturar tela. Tente novamente.', 'error');
@@ -1193,6 +1210,15 @@
                 }
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
+
+                // Restaura o áudio que tinha sido silenciado automaticamente por causa
+                // do compartilhamento de áudio do sistema
+                if (mutedBeforeSystemShare !== null) {
+                    isMuted = mutedBeforeSystemShare;
+                    mutedBeforeSystemShare = null;
+                    updateVolumeIcon();
+                    applyAudioToAllTiles();
+                }
 
                 isSharing = false;
                 updateQualityInfoUI();
