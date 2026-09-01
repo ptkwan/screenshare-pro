@@ -1106,7 +1106,14 @@
 
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
-                        socket.emit('ice-candidate', { target: viewerId, candidate: e.candidate, sender: socket.id });
+                        // "screen-broadcast": nessa conexão EU sou quem transmite a tela.
+                        // Precisa desse rótulo pra não confundir com a conexão inversa (quando
+                        // essa mesma pessoa também está me assistindo ao mesmo tempo).
+                        socket.emit('ice-candidate', {
+                            target: viewerId,
+                            sender: socket.id,
+                            candidate: Object.assign(e.candidate.toJSON(), { kind: 'screen-broadcast' })
+                        });
                     }
                 };
 
@@ -1140,7 +1147,12 @@
 
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
-                        socket.emit('ice-candidate', { target: streamerId, candidate: e.candidate, sender: socket.id });
+                        // "screen-view": nessa conexão EU sou quem está assistindo a tela dela.
+                        socket.emit('ice-candidate', {
+                            target: streamerId,
+                            sender: socket.id,
+                            candidate: Object.assign(e.candidate.toJSON(), { kind: 'screen-view' })
+                        });
                     }
                 };
 
@@ -1172,7 +1184,20 @@
             }
 
             async function handleCandidate(data) {
-                const pc = viewerPeers[data.sender] || senderPeers[data.sender];
+                // "screen-broadcast" = quem mandou está transmitindo a tela PRA MIM,
+                // então essa conexão é a que EU estou assistindo (viewerPeers).
+                // "screen-view" = quem mandou está assistindo a MINHA tela,
+                // então essa conexão é a que EU estou transmitindo (senderPeers).
+                // Sem essa distinção, quando duas pessoas assistem uma à outra ao mesmo
+                // tempo, os candidatos das duas conexões se confundiam (um deles quebrava).
+                let pc;
+                if (data.candidate && data.candidate.kind === 'screen-view') {
+                    pc = senderPeers[data.sender];
+                } else if (data.candidate && data.candidate.kind === 'screen-broadcast') {
+                    pc = viewerPeers[data.sender];
+                } else {
+                    pc = viewerPeers[data.sender] || senderPeers[data.sender];
+                }
                 if (pc) {
                     await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
                 }
