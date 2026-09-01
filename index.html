@@ -122,7 +122,17 @@
                 <i class="ph ph-spinner-gap animate-spin"></i> Conectando ao servidor...
             </div>
             <input type="text" id="input-username" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite seu nome (Opcional)">
-            <div class="border-t border-zinc-800 pt-4 mt-2">
+
+            <!-- ENTRADA RÁPIDA: mostrado quando já existe uma sala salva -->
+            <div id="quick-join-section" class="hidden flex flex-col gap-2">
+                <button id="btn-quick-join" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-3 rounded-lg transition-colors disabled:opacity-50" disabled>
+                    Entrar em "<span id="quick-join-room-name"></span>"
+                </button>
+                <button id="btn-switch-room" type="button" class="text-xs text-zinc-500 hover:text-zinc-300 underline self-center">Trocar de sala</button>
+            </div>
+
+            <!-- ESCOLHER/CRIAR SALA: mostrado na primeira vez, ou ao clicar em "Trocar de sala" -->
+            <div id="full-room-section" class="hidden border-t border-zinc-800 pt-4 mt-2">
                 <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
                 <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]"></div>
                 <div class="flex gap-2">
@@ -283,9 +293,7 @@
             <i class="ph ph-sidebar-simple text-2xl"></i>
         </button>
 
-        <button class="control-btn ml-4" id="btn-back-lobby" title="Voltar ao Lobby"><i class="ph ph-door-open text-2xl"></i></button>
-
-        <button class="control-btn danger-state w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
+        <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
@@ -1473,6 +1481,7 @@
                 discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
                 inputNewRoom.disabled = false;
                 btnCreateRoom.disabled = false;
+                document.getElementById('btn-quick-join').disabled = false;
                 showToast('Conectado', 'Servidor conectado.');
                 socket.emit('get-rooms');
             });
@@ -1663,8 +1672,8 @@
             // ==========================================
             // ENTRAR NA SALA
             // ==========================================
-            btnCreateRoom.addEventListener('click', () => {
-                const roomName = inputNewRoom.value.trim();
+            function joinRoom(roomName) {
+                roomName = (roomName || '').trim();
                 const myUsername = inputUsername.value.trim() || 'Participante';
                 if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
 
@@ -1696,6 +1705,38 @@
                 setControlsEnabled(false);
 
                 socket.emit('join-room', { roomId: currentRoom, username: myUsername });
+            }
+
+            btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
+
+            // ==========================================
+            // ENTRADA RÁPIDA: se já tem uma sala salva, pula a escolha
+            // ==========================================
+            const quickJoinSection = document.getElementById('quick-join-section');
+            const fullRoomSection = document.getElementById('full-room-section');
+            const quickJoinRoomName = document.getElementById('quick-join-room-name');
+            const btnQuickJoin = document.getElementById('btn-quick-join');
+            const btnSwitchRoom = document.getElementById('btn-switch-room');
+            const lastRoom = localStorage.getItem('ssp-last-room');
+
+            function showQuickJoin() {
+                quickJoinRoomName.textContent = lastRoom;
+                quickJoinSection.classList.remove('hidden');
+                fullRoomSection.classList.add('hidden');
+            }
+            function showFullRoomPicker() {
+                quickJoinSection.classList.add('hidden');
+                fullRoomSection.classList.remove('hidden');
+            }
+
+            if (lastRoom) showQuickJoin(); else showFullRoomPicker();
+
+            btnQuickJoin.addEventListener('click', () => joinRoom(lastRoom));
+            btnSwitchRoom.addEventListener('click', showFullRoomPicker);
+            inputUsername.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && lastRoom && !quickJoinSection.classList.contains('hidden')) {
+                    joinRoom(lastRoom);
+                }
             });
 
             // ==========================================
@@ -1860,48 +1901,6 @@
                 }
             });
 
-            // ==========================================
-            // VOLTAR AO LOBBY (TROCAR DE SALA)
-            // ==========================================
-            function returnToLobby() {
-                if (isSharing) stopScreenShare();
-
-                Object.values(viewerPeers).forEach(pc => pc.close());
-                Object.values(senderPeers).forEach(pc => pc.close());
-                Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
-                Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
-                closeAllVoicePeers();
-                perUserMuted.clear();
-                selectedStreamers.clear();
-
-                videoGrid.innerHTML = '';
-                updateGridLayout();
-
-                usersListEl.innerHTML = '';
-                userCountEl.textContent = '0';
-                window._users = [];
-
-                textChannels = [];
-                voiceChannels = [];
-                myVoiceChannel = null;
-                viewingType = null;
-                viewingChannel = null;
-                Object.keys(chatHistories).forEach(k => delete chatHistories[k]);
-                setControlsEnabled(false);
-
-                currentRoom = null;
-                statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
-                statusText.textContent = 'Desconectado';
-
-                // Reconecta o socket para o servidor limpar nossa presença na sala anterior
-                socket.disconnect();
-                socket.connect();
-
-                inputNewRoom.value = '';
-                document.getElementById('connection-modal').classList.remove('hidden');
-            }
-
-            document.getElementById('btn-back-lobby').addEventListener('click', returnToLobby);
         });
     </script>
 </body>
