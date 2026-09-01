@@ -129,6 +129,10 @@
                     <button type="button" data-mode="none" class="audio-mode-btn active-mode"><i class="ph ph-speaker-slash block mb-1"></i>Sem Áudio</button>
                 </div>
                 <p class="text-xs text-zinc-500 mt-2">Seu microfone já é transmitido pelo chat de voz da sala. Aqui você escolhe se quer compartilhar também o áudio do sistema (jogos, vídeos, música, etc.) junto com a tela.</p>
+                <p id="system-audio-warning" class="text-xs text-yellow-500 mt-2 hidden bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 flex items-start gap-2">
+                    <i class="ph ph-warning-circle text-sm mt-0.5 flex-shrink-0"></i>
+                    <span>Atenção: "Áudio do Sistema" captura tudo que toca no seu PC, incluindo as vozes do chat de voz. Quem estiver assistindo pode se ouvir de volta (eco). Se não precisa compartilhar som de jogo/vídeo, deixe em "Sem Áudio".</span>
+                </p>
             </div>
 
             <div id="sources-list" class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto p-2"></div>
@@ -1083,6 +1087,7 @@
                     selectedAudioMode = btn.dataset.mode;
                     document.querySelectorAll('.audio-mode-btn').forEach(b => b.classList.remove('active-mode'));
                     btn.classList.add('active-mode');
+                    document.getElementById('system-audio-warning').classList.toggle('hidden', selectedAudioMode !== 'system');
                 });
             });
 
