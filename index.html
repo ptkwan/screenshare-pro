@@ -183,6 +183,18 @@
         </div>
     </div>
 
+    <!-- MODAL DE DISPOSITIVO DE SAÍDA DO CHAT DE VOZ -->
+    <div id="audio-output-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-waveform text-blue-500"></i> Saída do Chat de Voz</h2>
+                <button id="btn-close-audio-output-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <p class="text-xs text-zinc-500">Escolha pra qual dispositivo mandar o áudio do chat de voz e das telas dos outros. Use um cabo de áudio virtual (ex: VB-Cable) se quiser compartilhar "Áudio do Sistema" sem que as vozes do app apareçam pra quem está assistindo.</p>
+            <div id="audio-output-options" class="flex flex-col gap-2 max-h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
     <div id="voice-audio-container" style="display:none"></div>
 
@@ -293,6 +305,10 @@
 
         <button class="control-btn" id="btn-toggle-participants" title="Ocultar/Mostrar lista de participantes">
             <i class="ph ph-sidebar-simple text-2xl"></i>
+        </button>
+
+        <button class="control-btn" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz">
+            <i class="ph ph-waveform text-2xl"></i>
         </button>
 
         <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
@@ -422,10 +438,83 @@
             let isMicMuted = false;
             let audioCtx = null;
 
+            // ==========================================
+            // DISPOSITIVO DE SAÍDA DO CHAT DE VOZ (pra usar com cabo de áudio virtual,
+            // tipo VB-Cable, e não vazar as vozes pro "Áudio do Sistema" compartilhado)
+            // ==========================================
+            let outputDeviceId = localStorage.getItem('ssp-output-device-id') || 'default';
+
             function getAudioCtx() {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (outputDeviceId !== 'default' && typeof audioCtx.setSinkId === 'function') {
+                        audioCtx.setSinkId(outputDeviceId).catch(() => {});
+                    }
+                }
                 return audioCtx;
             }
+
+            async function applyOutputDeviceToAll() {
+                if (audioCtx && typeof audioCtx.setSinkId === 'function') {
+                    try { await audioCtx.setSinkId(outputDeviceId); } catch (e) { console.warn('Não foi possível trocar o dispositivo de saída (voz):', e); }
+                }
+                Array.from(videoGrid.querySelectorAll('.video-tile video')).forEach(async (v) => {
+                    if (typeof v.setSinkId === 'function') {
+                        try { await v.setSinkId(outputDeviceId); } catch (e) { /* dispositivo pode não aceitar esse elemento, ignora */ }
+                    }
+                });
+            }
+
+            async function renderAudioOutputOptions() {
+                const container = document.getElementById('audio-output-options');
+                container.innerHTML = '<div class="text-xs text-zinc-500">Carregando dispositivos...</div>';
+                try {
+                    await ensureMicStream(); // rótulos dos dispositivos só vêm preenchidos com permissão de mídia concedida
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const outputs = devices.filter(d => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+                    container.innerHTML = '';
+
+                    const allOptions = [{ deviceId: 'default', label: 'Padrão do Sistema' }, ...outputs];
+                    allOptions.forEach(dev => {
+                        const div = document.createElement('div');
+                        div.className = 'quality-option' + (outputDeviceId === dev.deviceId ? ' active-mode' : '');
+                        div.innerHTML = `
+                            <div class="flex flex-col">
+                                <span class="qo-title">${dev.label || 'Dispositivo sem nome'}</span>
+                            </div>
+                            <span class="qo-radio"></span>
+                        `;
+                        div.addEventListener('click', async () => {
+                            outputDeviceId = dev.deviceId;
+                            localStorage.setItem('ssp-output-device-id', outputDeviceId);
+                            localStorage.setItem('ssp-output-device-label', dev.label || '');
+                            await applyOutputDeviceToAll();
+                            renderAudioOutputOptions();
+                            showToast('Áudio', `Chat de voz agora sai por: ${dev.label || 'Padrão do Sistema'}.`);
+                        });
+                        container.appendChild(div);
+                    });
+
+                    if (outputs.length === 0) {
+                        const hint = document.createElement('p');
+                        hint.className = 'text-xs text-zinc-500 mt-1';
+                        hint.textContent = 'Só o dispositivo padrão foi encontrado. Instale um cabo de áudio virtual (ex: VB-Cable) pra ter uma opção separada e poder compartilhar "Áudio do Sistema" sem vazar o chat de voz.';
+                        container.appendChild(hint);
+                    }
+                } catch (e) {
+                    container.innerHTML = '<div class="text-xs text-red-400">Não foi possível listar os dispositivos de áudio.</div>';
+                }
+            }
+
+            document.getElementById('btn-audio-output').addEventListener('click', () => {
+                renderAudioOutputOptions();
+                document.getElementById('audio-output-modal').classList.remove('hidden');
+                document.getElementById('audio-output-modal').classList.add('flex');
+            });
+            document.getElementById('btn-close-audio-output-modal').addEventListener('click', () => {
+                document.getElementById('audio-output-modal').classList.add('hidden');
+                document.getElementById('audio-output-modal').classList.remove('flex');
+            });
 
             function applyGainForUser(peerId) {
                 const gain = gainNodes[peerId];
@@ -1038,6 +1127,9 @@
                 videoEl.muted = isMuted;
                 videoEl.volume = masterVolume;
                 videoEl.classList.add('active');
+                if (outputDeviceId !== 'default' && typeof videoEl.setSinkId === 'function') {
+                    videoEl.setSinkId(outputDeviceId).catch(() => {});
+                }
 
                 function attemptPlay(attempt = 0) {
                     if (attempt > 10) return;
@@ -1801,10 +1893,12 @@
                 showToast('Compartilhando', settingsLabel);
 
                 // Compartilhando áudio do sistema: o que você ouve tocaria de volta pro
-                // seu PC e vazaria pra captura de áudio, causando eco/vozes duplicadas
-                // pra quem está assistindo. Então silenciamos só o seu lado (seu mic
-                // continua normal) enquanto isso estiver ligado.
-                if (audioMode === 'system') {
+                // seu PC e vazaria pra captura de áudio, causando eco/vozes duplicadas pra
+                // quem está assistindo. Se a saída do chat de voz já está configurada pra
+                // um dispositivo separado (ex: cabo de áudio virtual), esse vazamento não
+                // acontece e não precisamos silenciar nada. Só travamos no mudo quando a
+                // saída ainda é a padrão do sistema (aí sim ela seria capturada junto).
+                if (audioMode === 'system' && outputDeviceId === 'default') {
                     mutedBeforeSystemShare = isMuted;
                     if (!isMuted) {
                         isMuted = true;
@@ -1817,7 +1911,7 @@
                     btnVolume.classList.add('disabled-btn');
                     btnVolume.title = 'Bloqueado enquanto você compartilha o áudio do sistema, pra evitar eco';
                     volumeSlider.disabled = true;
-                    showToast('Áudio', 'Como você está compartilhando o áudio do sistema, o que você ouve dos outros fica travado no mudo (evita eco). Seu microfone continua normal.', 'info');
+                    showToast('Áudio', 'Como você está compartilhando o áudio do sistema, o que você ouve dos outros fica travado no mudo (evita eco). Seu microfone continua normal. Configure um dispositivo de saída separado (ícone de onda sonora) pra não precisar disso.', 'info');
                 } else {
                     mutedBeforeSystemShare = null;
                 }
