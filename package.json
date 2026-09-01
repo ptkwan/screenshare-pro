@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.seu-nome.screensharepro",
-    "productName": "ScreenShare Pro",
+    "productName": "Discord do BOA",
     "publish": {
       "provider": "github",
       "owner": "ptkwan",
