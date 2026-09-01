@@ -46,6 +46,8 @@
 
         input[type="range"].volume-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 999px; background: #3f3f46; outline: none; cursor: pointer; }
         input[type="range"].volume-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #dbeafe; }
+        input[type="range"].volume-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+        input[type="range"].volume-slider:disabled::-webkit-slider-thumb { cursor: not-allowed; }
 
         /* Estilos dos Botões da Lista */
         .btn-assistir {
@@ -1094,6 +1096,10 @@
             updateVolumeIcon(); // sincroniza o ícone com o estado inicial (desmutado)
 
             btnVolume.addEventListener('click', () => {
+                if (btnVolume.classList.contains('disabled-btn')) {
+                    showToast('Áudio', 'Bloqueado enquanto você compartilha o áudio do sistema, pra evitar eco.', 'error');
+                    return;
+                }
                 isMuted = !isMuted;
                 if (!isMuted && masterVolume === 0) {
                     masterVolume = 1;
@@ -1105,6 +1111,7 @@
             });
 
             volumeSlider.addEventListener('input', () => {
+                if (volumeSlider.disabled) return;
                 masterVolume = Number(volumeSlider.value) / 100;
                 isMuted = masterVolume === 0;
                 updateVolumeIcon();
@@ -1804,7 +1811,13 @@
                         updateVolumeIcon();
                         applyAudioToAllTiles();
                     }
-                    showToast('Áudio', 'Como você está compartilhando o áudio do sistema, silenciamos o que você ouve dos outros pra evitar eco. Seu microfone continua normal.', 'info');
+                    // Trava o botão de volume: se a pessoa reativar o áudio manualmente
+                    // enquanto compartilha o áudio do sistema, o eco volta (o que ela ouve
+                    // vaza de novo pro compartilhamento). Só destrava ao parar de compartilhar.
+                    btnVolume.classList.add('disabled-btn');
+                    btnVolume.title = 'Bloqueado enquanto você compartilha o áudio do sistema, pra evitar eco';
+                    volumeSlider.disabled = true;
+                    showToast('Áudio', 'Como você está compartilhando o áudio do sistema, o que você ouve dos outros fica travado no mudo (evita eco). Seu microfone continua normal.', 'info');
                 } else {
                     mutedBeforeSystemShare = null;
                 }
@@ -1882,6 +1895,9 @@
                     updateVolumeIcon();
                     applyAudioToAllTiles();
                 }
+                btnVolume.classList.remove('disabled-btn');
+                btnVolume.title = 'Mutar/Ativar tudo que você ouve (tela + voz dos outros)';
+                volumeSlider.disabled = false;
 
                 isSharing = false;
                 updateQualityInfoUI();

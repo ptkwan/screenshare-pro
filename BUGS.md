@@ -8,6 +8,27 @@ sessão.
 
 ## 2026-09-01
 
+### Correção do "auto-mudo" ao compartilhar áudio do sistema era fácil de desfazer sem querer
+- **Sintoma**: mesmo depois da correção que muta automaticamente quem
+  compartilha "Áudio do Sistema", o eco continuava acontecendo às vezes. Só
+  parava quando a pessoa compartilhando silenciava manualmente o outro
+  participante especificamente (mute individual).
+- **Causa**: o "auto-mudo" só define o estado inicial (`isMuted = true`) no
+  momento em que o compartilhamento começa, mas o botão de volume/slider
+  continuavam clicáveis normalmente. Quem está compartilhando, querendo
+  ouvir a pessoa falando durante a call, clica no botão de volume pra
+  reativar o áudio — e sem perceber, desfaz a proteção e o eco volta.
+- **Correção**: o botão de volume e o slider ficam **travados** (visual e
+  funcionalmente — clique/arraste não fazem nada, inclusive clique
+  disparado por código) enquanto o "Áudio do Sistema" estiver ligado.
+  Só destrava ao parar de compartilhar. É um trade-off consciente: não dá
+  pra ouvir os outros enquanto compartilha áudio do sistema, mas isso é
+  necessário pra não vazar eco pra quem assiste.
+- **Validado**: teste automatizado tentando reativar o áudio por clique
+  normal e por clique disparado via código durante o compartilhamento —
+  confirmado que o estado mudo se mantém nos dois casos, e destrava
+  corretamente ao parar de compartilhar.
+
 ### Eco/vozes duplicadas ao trocar de canal de voz (vazamento de áudio no Web Audio)
 - **Sintoma**: depois de usar o app um tempo (trocando de sala de voz, ou de
   sala/servidor), quem estava ouvindo passava a escutar a própria voz de
