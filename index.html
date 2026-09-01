@@ -335,6 +335,7 @@
             const inputUsername = document.getElementById('input-username');
             inputUsername.value = localStorage.getItem('ssp-username') || '';
             const inputNewRoom = document.getElementById('input-new-room');
+            inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
@@ -395,7 +396,9 @@
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
             // Player começa mutado, volume "cheio" quando ativado
-            let isMuted = true;
+            // Começa desmutado por padrão — senão a pessoa acha que o app tá com
+            // problema quando na real só esqueceu de ativar o áudio.
+            let isMuted = false;
             let masterVolume = 1.0;
 
             // ==========================================
@@ -1066,6 +1069,7 @@
                     btnVolume.classList.add('volume-active');
                 }
             }
+            updateVolumeIcon(); // sincroniza o ícone com o estado inicial (desmutado)
 
             btnVolume.addEventListener('click', () => {
                 isMuted = !isMuted;
@@ -1572,6 +1576,7 @@
             socket.on('room-renamed', ({ newName }) => {
                 currentRoom = newName;
                 statusText.textContent = newName;
+                localStorage.setItem('ssp-last-room', newName);
                 showToast('Sala', `Essa sala agora se chama "${newName}".`);
                 renderChannelSidebar();
             });
@@ -1650,6 +1655,7 @@
                 if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
 
                 localStorage.setItem('ssp-username', myUsername);
+                localStorage.setItem('ssp-last-room', roomName);
                 document.getElementById('connection-modal').classList.add('hidden');
                 currentRoom = roomName;
                 statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
