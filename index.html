@@ -550,6 +550,24 @@
                 removeVoiceAudio(peerId);
             }
 
+            // Fecha TODAS as conexões de voz de uma vez (troca de sala/canal).
+            // Importante: passa por removeVoiceAudio() pra cada uma, que desconecta o
+            // GainNode do Web Audio de verdade — só fechar a RTCPeerConnection e limpar
+            // o HTML não desliga o nó de áudio (ele fica preso tocando pro sempre,
+            // sobrepondo com as conexões novas e causando eco/vozes duplicadas).
+            function closeAllVoicePeers() {
+                Object.values(voicePeers).forEach(pc => pc.close());
+                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
+                Array.from(document.querySelectorAll('#voice-audio-container audio[data-voice-id]')).forEach(el => {
+                    removeVoiceAudio(el.dataset.voiceId);
+                });
+                // Garantia extra: desconecta qualquer GainNode que tenha sobrado órfão
+                Object.keys(gainNodes).forEach(peerId => {
+                    try { gainNodes[peerId].disconnect(); } catch (e) { /* ignora */ }
+                    delete gainNodes[peerId];
+                });
+            }
+
             function updateMicIcon() {
                 const btnMic = document.getElementById('btn-mic');
                 if (isMicMuted) {
@@ -719,9 +737,7 @@
 
                 if (isSharing) stopScreenShare();
 
-                Object.values(voicePeers).forEach(pc => pc.close());
-                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
-                document.getElementById('voice-audio-container').innerHTML = '';
+                closeAllVoicePeers();
 
                 Array.from(selectedStreamers).forEach(id => unwatchStreamer(id));
                 videoGrid.innerHTML = '';
@@ -754,9 +770,7 @@
                 if (!myVoiceChannel) return;
                 if (isSharing) stopScreenShare();
 
-                Object.values(voicePeers).forEach(pc => pc.close());
-                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
-                document.getElementById('voice-audio-container').innerHTML = '';
+                closeAllVoicePeers();
 
                 Array.from(selectedStreamers).forEach(id => unwatchStreamer(id));
                 videoGrid.innerHTML = '';
@@ -1667,9 +1681,7 @@
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
-                Object.values(voicePeers).forEach(pc => pc.close());
-                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
-                document.getElementById('voice-audio-container').innerHTML = '';
+                closeAllVoicePeers();
                 perUserMuted.clear();
                 selectedStreamers.clear();
                 videoGrid.innerHTML = '';
@@ -1858,9 +1870,7 @@
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
-                Object.values(voicePeers).forEach(pc => pc.close());
-                Object.keys(voicePeers).forEach(k => delete voicePeers[k]);
-                document.getElementById('voice-audio-container').innerHTML = '';
+                closeAllVoicePeers();
                 perUserMuted.clear();
                 selectedStreamers.clear();
 

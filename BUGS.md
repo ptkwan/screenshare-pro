@@ -8,6 +8,30 @@ sessão.
 
 ## 2026-09-01
 
+### Eco/vozes duplicadas ao trocar de canal de voz (vazamento de áudio no Web Audio)
+- **Sintoma**: depois de usar o app um tempo (trocando de sala de voz, ou de
+  sala/servidor), quem estava ouvindo passava a escutar a própria voz de
+  volta, ou vozes sobrepostas — "eco"/"retorno" constante, piorando com o
+  tempo de uso.
+- **Causa**: quando o chat de voz passou a usar Web Audio API (GainNode) pra
+  permitir volume de 0-200% por pessoa, as funções que fecham TODAS as
+  conexões de voz de uma vez (entrar/sair de canal de voz, trocar de sala,
+  voltar ao lobby) fechavam a `RTCPeerConnection` e apagavam os elementos
+  `<audio>` do HTML, mas nunca chamavam `.disconnect()` nos `GainNode`
+  correspondentes. Nó de Web Audio conectado ao destino continua tocando
+  pra sempre mesmo sem nenhuma referência JS apontando pra ele — cada troca
+  de canal deixava um nó "fantasma" tocando por cima dos novos, empilhando
+  áudio duplicado (incluindo a própria voz de quem ouve, já que ela também
+  passa pela malha de voz).
+- **Correção**: criada `closeAllVoicePeers()`, usada nos 4 lugares que
+  fechavam conexões de voz em lote — ela passa cada peer por
+  `removeVoiceAudio()` (que já desconectava o GainNode corretamente no
+  caso de desconexão individual) em vez de só limpar o HTML.
+- **Validado**: teste automatizado trocando de canal de voz 3x seguidas
+  entre duas instâncias — antes da correção o número de GainNodes ativos
+  cresceria a cada troca; depois da correção fica sempre em 1 (só a conexão
+  atual).
+
 ### Eco / vozes duplicadas ao compartilhar "Áudio do Sistema"
 - **Sintoma**: quem assistia a tela de alguém compartilhando com "Áudio do
   Sistema" ligado ouvia a própria voz de volta (eco), ou ouvia as vozes do
