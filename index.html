@@ -162,7 +162,7 @@
                 <p class="text-xs text-zinc-500 mt-2">Seu microfone já é transmitido pelo chat de voz da sala. Aqui você escolhe se quer compartilhar também o áudio do sistema (jogos, vídeos, música, etc.) junto com a tela.</p>
                 <p id="system-audio-warning" class="text-xs text-yellow-500 mt-2 hidden bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 flex items-start gap-2">
                     <i class="ph ph-warning-circle text-sm mt-0.5 flex-shrink-0"></i>
-                    <span>"Áudio do Sistema" captura tudo que toca no seu PC. Pra evitar eco/vozes duplicadas pra quem assiste, o app vai silenciar automaticamente o que <strong>você</strong> ouve dos outros enquanto isso estiver ligado (seu microfone continua normal, todo mundo continua te ouvindo).</span>
+                    <span>Se você escolher uma <strong>janela específica</strong> (ex: um jogo), o app tenta capturar só o áudio dela — sem eco, sem precisar silenciar nada. Se escolher "Tela Cheia" (que pega tudo que toca no PC), o app silencia automaticamente o que <strong>você</strong> ouve dos outros enquanto isso estiver ligado, pra evitar eco (seu microfone continua normal).</span>
                 </p>
             </div>
 
@@ -437,6 +437,110 @@
             let micStream = null;
             let isMicMuted = false;
             let audioCtx = null;
+
+            // ==========================================
+            // ÁUDIO POR APLICATIVO (nativo, Windows) — captura só o processo da janela
+            // sendo compartilhada, igual o Discord faz. Não precisa de cabo virtual e
+            // não corre risco de vazar o chat de voz, já que é um processo totalmente
+            // separado do nosso app. Só funciona ao compartilhar uma JANELA específica
+            // (não "Tela Cheia", que não tem um processo único pra apontar).
+            // ==========================================
+            let usedNativeAppAudio = false;
+            let nativeAudioCtx = null;
+            let nativeAudioWorkletNode = null;
+            let nativeAudioDest = null;
+            let stopNativeAudioListener = null;
+
+            const PCM_WORKLET_CODE = `
+                class PCMPlayerProcessor extends AudioWorkletProcessor {
+                    constructor() {
+                        super();
+                        this.ringSize = 48000 * 2; // ~1s de buffer, estéreo intercalado
+                        this.ring = new Float32Array(this.ringSize);
+                        this.writeIndex = 0;
+                        this.readIndex = 0;
+                        this.available = 0;
+                        this.port.onmessage = (e) => {
+                            const data = e.data; // Float32Array intercalado [L,R,L,R,...]
+                            for (let i = 0; i < data.length; i++) {
+                                this.ring[this.writeIndex] = data[i];
+                                this.writeIndex = (this.writeIndex + 1) % this.ringSize;
+                                if (this.available < this.ringSize) this.available++;
+                                else this.readIndex = (this.readIndex + 1) % this.ringSize;
+                            }
+                        };
+                    }
+                    process(inputs, outputs) {
+                        const output = outputs[0];
+                        const left = output[0];
+                        const right = output[1] || output[0];
+                        for (let i = 0; i < left.length; i++) {
+                            if (this.available >= 2) {
+                                left[i] = this.ring[this.readIndex];
+                                this.readIndex = (this.readIndex + 1) % this.ringSize;
+                                right[i] = this.ring[this.readIndex];
+                                this.readIndex = (this.readIndex + 1) % this.ringSize;
+                                this.available -= 2;
+                            } else {
+                                left[i] = 0;
+                                right[i] = 0;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                registerProcessor('pcm-player-processor', PCMPlayerProcessor);
+            `;
+
+            // Tenta iniciar a captura nativa por app pra essa fonte. Retorna a
+            // MediaStreamTrack de áudio pronta, ou null se não deu (aí quem chamou
+            // deve cair de volta no jeito antigo de capturar áudio do sistema).
+            async function tryStartNativeAppAudio(sourceId) {
+                if (!window.electronAPI || !window.electronAPI.resolveWindowPid) return null;
+                try {
+                    const pid = await window.electronAPI.resolveWindowPid(sourceId);
+                    if (!pid) return null; // não é uma janela específica (ex: "Tela Cheia")
+
+                    nativeAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                    const blobUrl = URL.createObjectURL(new Blob([PCM_WORKLET_CODE], { type: 'application/javascript' }));
+                    await nativeAudioCtx.audioWorklet.addModule(blobUrl);
+                    URL.revokeObjectURL(blobUrl);
+
+                    nativeAudioWorkletNode = new AudioWorkletNode(nativeAudioCtx, 'pcm-player-processor', { outputChannelCount: [2] });
+                    nativeAudioDest = nativeAudioCtx.createMediaStreamDestination();
+                    nativeAudioWorkletNode.connect(nativeAudioDest);
+
+                    stopNativeAudioListener = window.electronAPI.onAppAudioChunk((chunk) => {
+                        const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+                        const sampleCount = Math.floor(bytes.length / 2);
+                        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                        const floats = new Float32Array(sampleCount);
+                        for (let i = 0; i < sampleCount; i++) floats[i] = view.getInt16(i * 2, true) / 32768;
+                        nativeAudioWorkletNode.port.postMessage(floats, [floats.buffer]);
+                    });
+
+                    const started = await window.electronAPI.startAppAudioCapture(pid);
+                    if (!started) { stopNativeAppAudio(); return null; }
+
+                    usedNativeAppAudio = true;
+                    return nativeAudioDest.stream.getAudioTracks()[0];
+                } catch (e) {
+                    console.warn('Não foi possível iniciar a captura de áudio nativa por app:', e);
+                    stopNativeAppAudio();
+                    return null;
+                }
+            }
+
+            function stopNativeAppAudio() {
+                if (usedNativeAppAudio && window.electronAPI && window.electronAPI.stopAppAudioCapture) {
+                    window.electronAPI.stopAppAudioCapture();
+                }
+                if (stopNativeAudioListener) { stopNativeAudioListener(); stopNativeAudioListener = null; }
+                if (nativeAudioWorkletNode) { try { nativeAudioWorkletNode.disconnect(); } catch (e) { /* ignora */ } nativeAudioWorkletNode = null; }
+                if (nativeAudioDest) { try { nativeAudioDest.disconnect(); } catch (e) { /* ignora */ } nativeAudioDest = null; }
+                if (nativeAudioCtx) { try { nativeAudioCtx.close(); } catch (e) { /* ignora */ } nativeAudioCtx = null; }
+                usedNativeAppAudio = false;
+            }
 
             // ==========================================
             // DISPOSITIVO DE SAÍDA DO CHAT DE VOZ (pra usar com cabo de áudio virtual,
@@ -1894,11 +1998,11 @@
 
                 // Compartilhando áudio do sistema: o que você ouve tocaria de volta pro
                 // seu PC e vazaria pra captura de áudio, causando eco/vozes duplicadas pra
-                // quem está assistindo. Se a saída do chat de voz já está configurada pra
-                // um dispositivo separado (ex: cabo de áudio virtual), esse vazamento não
-                // acontece e não precisamos silenciar nada. Só travamos no mudo quando a
-                // saída ainda é a padrão do sistema (aí sim ela seria capturada junto).
-                if (audioMode === 'system' && outputDeviceId === 'default') {
+                // quem está assistindo. Isso não é um risco quando: (a) já estamos usando
+                // a captura nativa por app (processo separado, não tem como vazar), ou
+                // (b) a saída do chat de voz já está num dispositivo separado (cabo de
+                // áudio virtual). Só travamos no mudo quando nenhuma dessas se aplica.
+                if (audioMode === 'system' && !usedNativeAppAudio && outputDeviceId === 'default') {
                     mutedBeforeSystemShare = isMuted;
                     if (!isMuted) {
                         isMuted = true;
@@ -1914,6 +2018,9 @@
                     showToast('Áudio', 'Como você está compartilhando o áudio do sistema, o que você ouve dos outros fica travado no mudo (evita eco). Seu microfone continua normal. Configure um dispositivo de saída separado (ícone de onda sonora) pra não precisar disso.', 'info');
                 } else {
                     mutedBeforeSystemShare = null;
+                    if (usedNativeAppAudio) {
+                        showToast('Áudio', 'Capturando só o áudio desse aplicativo. Você continua ouvindo todo mundo normalmente.', 'info');
+                    }
                 }
 
                 socket.emit('start-sharing');
@@ -1934,9 +2041,18 @@
                         }
                     };
 
+                    // Compartilhando uma JANELA específica com "Áudio do Sistema": tenta
+                    // primeiro a captura nativa por processo (só o som desse app, sem
+                    // risco de eco, sem precisar de dispositivo separado). Só cai pro
+                    // jeito antigo (captura de todo o sistema) se não der certo.
+                    let nativeAudioTrack = null;
+                    if (audioMode === 'system' && sourceId.startsWith('window:')) {
+                        nativeAudioTrack = await tryStartNativeAppAudio(sourceId);
+                    }
+
                     let mediaConstraints = { video: videoConstraints, audio: false };
-                    if (audioMode === 'system') {
-                        // Captura tudo que o sistema está reproduzindo (inclui Discord)
+                    if (audioMode === 'system' && !nativeAudioTrack) {
+                        // Captura tudo que o sistema está reproduzindo (inclui o próprio app)
                         mediaConstraints.audio = {
                             mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId }
                         };
@@ -1960,15 +2076,18 @@
                     videoTrack.contentHint = 'detail'; // prioriza nitidez de texto/detalhe sobre fluidez
                     const videoSettings = videoTrack.getSettings();
 
-                    const audioTracks = capturedStream.getAudioTracks();
+                    const audioTracks = nativeAudioTrack ? [nativeAudioTrack] : capturedStream.getAudioTracks();
 
                     localStream = new MediaStream([videoTrack, ...audioTracks]);
 
-                    const audioLabel = audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)';
+                    const audioLabel = nativeAudioTrack
+                        ? ' + áudio só desse app'
+                        : (audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)');
                     onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`, audioMode);
                 } catch (err) {
                     console.error(err);
                     showToast('Erro', 'Falha ao capturar tela. Tente novamente.', 'error');
+                    stopNativeAppAudio();
                 }
             }
 
@@ -1980,6 +2099,8 @@
                 }
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
+
+                if (usedNativeAppAudio) stopNativeAppAudio();
 
                 // Restaura o áudio que tinha sido silenciado automaticamente por causa
                 // do compartilhamento de áudio do sistema

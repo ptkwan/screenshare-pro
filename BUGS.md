@@ -8,6 +8,24 @@ sessão.
 
 ## 2026-09-01
 
+### Script `.ps1` de resolução de PID quebrava só no build empacotado (não em dev)
+- **Sintoma**: a captura de áudio por aplicativo (que resolve o PID de uma
+  janela via PowerShell) funcionava perfeitamente em modo dev, mas quebraria
+  silenciosamente no instalador final.
+- **Causa**: o script `native/resolve-window-pid.ps1` era referenciado via
+  `path.join(__dirname, 'native', ...)`. Em modo dev isso aponta pra um
+  arquivo real no disco. No app empacotado, `__dirname` fica dentro do
+  `app.asar` (um arquivo único, não uma pasta de verdade) — e o PowerShell é
+  um processo *externo* que não entende esse sistema de arquivos virtual do
+  Electron, só arquivos reais no disco.
+- **Correção**: adicionado `native/**/*` no `asarUnpack` do `package.json`
+  (igual já era feito pro módulo nativo `loopback-capture`), e o caminho do
+  script em `main.js` passou a apontar pra `resources/app.asar.unpacked/...`
+  quando `app.isPackaged` é verdadeiro.
+- **Como foi encontrado**: rodando o build empacotado de verdade (`electron-builder --dir`)
+  antes de lançar, em vez de confiar só no teste em modo dev — esse tipo de
+  bug de empacotamento nunca aparece rodando `npm start`.
+
 ### Correção do "auto-mudo" ao compartilhar áudio do sistema era fácil de desfazer sem querer
 - **Sintoma**: mesmo depois da correção que muta automaticamente quem
   compartilha "Áudio do Sistema", o eco continuava acontecendo às vezes. Só
