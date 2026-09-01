@@ -20,7 +20,8 @@
         .video-tile video.active { opacity: 1; }
         .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 10; }
         .tile-remove { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f4f4f5; }
-        .video-tile:hover .tile-remove { opacity: 1; }
+        .tile-fullscreen { position: absolute; top: 10px; right: 48px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f4f4f5; }
+        .video-tile:hover .tile-remove, .video-tile:hover .tile-fullscreen { opacity: 1; }
         .live-dot-green { width: 8px; height: 8px; background-color: #22c55e; border-radius: 50%; flex-shrink: 0; }
         .video-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; z-index: 5; }
         @keyframes pulse-ring { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
@@ -193,8 +194,9 @@
 
         <!-- SIDEBAR DE CANAIS -->
         <aside class="w-60 h-full bg-zinc-950/60 border-r border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="h-14 border-b border-zinc-800 flex items-center px-4">
-                <h2 class="font-semibold text-sm text-zinc-200 truncate" id="server-name-label">Sala</h2>
+            <div class="h-14 border-b border-zinc-800 flex items-center gap-2 px-4 group">
+                <h2 class="font-semibold text-sm text-zinc-200 truncate flex-1" id="server-name-label">Sala</h2>
+                <button id="btn-rename-room" class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-sm"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
                 <div>
@@ -244,7 +246,7 @@
             </div>
         </div>
 
-        <aside class="w-72 h-full bg-zinc-900/50 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 hidden md:flex m-4 md:m-6">
+        <aside id="participants-sidebar" class="w-72 h-full bg-zinc-900/50 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 hidden md:flex m-4 md:m-6">
             <div class="h-14 border-b border-zinc-800 flex items-center justify-between px-4">
                 <h3 class="font-semibold text-sm text-zinc-200">Participantes (<span id="user-count">0</span>)</h3>
                 <i class="ph ph-users text-zinc-400 text-lg"></i>
@@ -277,12 +279,35 @@
             <i class="ph ph-arrows-out text-2xl"></i>
         </button>
 
+        <button class="control-btn" id="btn-toggle-participants" title="Ocultar/Mostrar lista de participantes">
+            <i class="ph ph-sidebar-simple text-2xl"></i>
+        </button>
+
         <button class="control-btn ml-4" id="btn-back-lobby" title="Voltar ao Lobby"><i class="ph ph-door-open text-2xl"></i></button>
 
         <button class="control-btn danger-state w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
+
+    <!-- MENU DE VOLUME POR USUÁRIO (CLIQUE COM O BOTÃO DIREITO) -->
+    <div id="user-volume-menu" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-3 w-56">
+        <div class="text-xs text-zinc-400 mb-2 truncate" id="user-volume-menu-name">Volume do usuário</div>
+        <div class="flex items-center gap-2">
+            <i class="ph ph-speaker-high text-zinc-400 flex-shrink-0"></i>
+            <input type="range" id="user-volume-slider" min="0" max="200" value="100" class="volume-slider flex-1">
+            <span id="user-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
+        </div>
+    </div>
+
+    <!-- POPUP GENÉRICO DE RENOMEAR (nome, sala, canais) -->
+    <div id="rename-popup" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-3 w-64">
+        <div class="text-xs text-zinc-400 mb-2" id="rename-popup-label">Renomear</div>
+        <form id="rename-popup-form" class="flex gap-2">
+            <input id="rename-popup-input" type="text" maxlength="40" class="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-blue-500">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 text-sm flex-shrink-0">OK</button>
+        </form>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -308,6 +333,7 @@
             const statusText = document.getElementById('status-text');
             const discoveryStatus = document.getElementById('discovery-status');
             const inputUsername = document.getElementById('input-username');
+            inputUsername.value = localStorage.getItem('ssp-username') || '';
             const inputNewRoom = document.getElementById('input-new-room');
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
@@ -377,8 +403,24 @@
             // ==========================================
             const voicePeers = {}; // peerId -> RTCPeerConnection (mic bidirecional)
             const perUserMuted = new Set(); // peerIds que eu silenciei manualmente
+            const userVolumes = {}; // peerId -> multiplicador de volume (1.0 = 100%, ate 2.0 = 200%)
+            const gainNodes = {}; // peerId -> GainNode (permite passar de 100%, o <audio> sozinho nao consegue)
             let micStream = null;
             let isMicMuted = false;
+            let audioCtx = null;
+
+            function getAudioCtx() {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                return audioCtx;
+            }
+
+            function applyGainForUser(peerId) {
+                const gain = gainNodes[peerId];
+                if (!gain) return;
+                const base = userVolumes[peerId] ?? 1.0;
+                const globallyMuted = isMuted || perUserMuted.has(peerId);
+                gain.gain.value = globallyMuted ? 0 : base * masterVolume;
+            }
 
             async function ensureMicStream() {
                 if (micStream) return micStream;
@@ -466,17 +508,35 @@
                     audioEl = document.createElement('audio');
                     audioEl.dataset.voiceId = peerId;
                     audioEl.autoplay = true;
+                    // O audio que se ouve de verdade sai pelo Web Audio (GainNode) logo abaixo,
+                    // isso aqui só mantém o stream decodificando. Fica mudo pra não tocar em dobro.
+                    audioEl.muted = true;
                     document.getElementById('voice-audio-container').appendChild(audioEl);
                 }
                 audioEl.srcObject = stream;
-                audioEl.muted = isMuted || perUserMuted.has(peerId);
-                audioEl.volume = masterVolume;
                 audioEl.play().catch(() => {});
+
+                try {
+                    const ctx = getAudioCtx();
+                    const source = ctx.createMediaStreamSource(stream);
+                    const gain = ctx.createGain();
+                    source.connect(gain).connect(ctx.destination);
+                    gainNodes[peerId] = gain;
+                    applyGainForUser(peerId);
+                } catch (e) {
+                    console.warn('Web Audio indisponível, tocando sem controle de volume por pessoa:', e);
+                    audioEl.muted = isMuted || perUserMuted.has(peerId);
+                    audioEl.volume = masterVolume;
+                }
             }
 
             function removeVoiceAudio(peerId) {
                 const audioEl = document.querySelector(`audio[data-voice-id="${peerId}"]`);
                 if (audioEl) audioEl.remove();
+                if (gainNodes[peerId]) {
+                    try { gainNodes[peerId].disconnect(); } catch (e) { /* ignora */ }
+                    delete gainNodes[peerId];
+                }
             }
 
             function closeVoicePeer(peerId) {
@@ -513,6 +573,122 @@
                 updateUserList();
             }
             window.toggleUserMute = toggleUserMute;
+
+            // ==========================================
+            // VOLUME POR USUÁRIO (CLIQUE COM O BOTÃO DIREITO, 0-200%)
+            // ==========================================
+            let volumeMenuPeerId = null;
+            const userVolumeMenu = document.getElementById('user-volume-menu');
+            const userVolumeSlider = document.getElementById('user-volume-slider');
+            const userVolumeValue = document.getElementById('user-volume-value');
+
+            function openUserVolumeMenu(peerId, peerName, x, y) {
+                volumeMenuPeerId = peerId;
+                document.getElementById('user-volume-menu-name').textContent = `Volume de ${peerName}`;
+                const pct = Math.round((userVolumes[peerId] ?? 1.0) * 100);
+                userVolumeSlider.value = pct;
+                userVolumeValue.textContent = pct + '%';
+
+                const menuWidth = 224, menuHeight = 80;
+                userVolumeMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
+                userVolumeMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
+                userVolumeMenu.classList.remove('hidden');
+            }
+
+            function closeUserVolumeMenu() {
+                userVolumeMenu.classList.add('hidden');
+                volumeMenuPeerId = null;
+            }
+
+            userVolumeSlider.addEventListener('input', () => {
+                if (!volumeMenuPeerId) return;
+                const pct = Number(userVolumeSlider.value);
+                userVolumeValue.textContent = pct + '%';
+                userVolumes[volumeMenuPeerId] = pct / 100;
+                applyGainForUser(volumeMenuPeerId);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!userVolumeMenu.classList.contains('hidden') && !userVolumeMenu.contains(e.target)) {
+                    closeUserVolumeMenu();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeUserVolumeMenu();
+            });
+
+            function attachVolumeContextMenu(el, peerId, peerName) {
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    openUserVolumeMenu(peerId, peerName, e.clientX, e.clientY);
+                });
+            }
+
+            // ==========================================
+            // POPUP GENÉRICO DE RENOMEAR (nome próprio, sala, canais)
+            // ==========================================
+            let renamePopupCallback = null;
+            const renamePopup = document.getElementById('rename-popup');
+            const renamePopupInput = document.getElementById('rename-popup-input');
+
+            function openRenamePopup(label, currentValue, x, y, onCommit) {
+                document.getElementById('rename-popup-label').textContent = label;
+                renamePopupInput.value = currentValue;
+                renamePopupCallback = onCommit;
+                const w = 256, h = 90;
+                renamePopup.style.left = Math.min(x, window.innerWidth - w - 8) + 'px';
+                renamePopup.style.top = Math.min(y, window.innerHeight - h - 8) + 'px';
+                renamePopup.classList.remove('hidden');
+                setTimeout(() => { renamePopupInput.focus(); renamePopupInput.select(); }, 0);
+            }
+
+            function closeRenamePopup() {
+                renamePopup.classList.add('hidden');
+                renamePopupCallback = null;
+            }
+
+            document.getElementById('rename-popup-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const val = renamePopupInput.value.trim();
+                const cb = renamePopupCallback;
+                closeRenamePopup();
+                if (val && cb) cb(val);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!renamePopup.classList.contains('hidden') && !renamePopup.contains(e.target)) {
+                    closeRenamePopup();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeRenamePopup();
+            });
+
+            window.startEditOwnName = function (e) {
+                e.stopPropagation();
+                const me = (window._users || []).find(u => u.id === socket.id);
+                const currentName = me ? me.name : (inputUsername.value || 'Participante');
+                openRenamePopup('Seu nome', currentName, e.clientX, e.clientY, (newName) => {
+                    socket.emit('rename-self', { newName });
+                    inputUsername.value = newName;
+                    localStorage.setItem('ssp-username', newName);
+                });
+            };
+
+            document.getElementById('btn-rename-room').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                openRenamePopup('Nome da sala', currentRoom || '', rect.left, rect.bottom + 6, (newName) => {
+                    socket.emit('rename-room', { newName });
+                });
+            });
+
+            window.startEditChannelName = function (e, type, oldName) {
+                e.stopPropagation();
+                openRenamePopup(type === 'text' ? 'Nome do canal de texto' : 'Nome do canal de voz', oldName, e.clientX, e.clientY, (newName) => {
+                    socket.emit('rename-channel', { type, oldName, newName });
+                });
+            };
 
             // ==========================================
             // ENTRAR / SAIR DE CANAL DE VOZ
@@ -611,9 +787,13 @@
                 textList.innerHTML = '';
                 textChannels.forEach(ch => {
                     const div = document.createElement('div');
-                    div.className = 'channel-item' + (viewingType === 'text' && viewingChannel === ch ? ' active-channel' : '');
-                    div.innerHTML = `<i class="ph ph-hash ch-icon"></i><span class="truncate">${ch}</span>`;
+                    div.className = 'channel-item group' + (viewingType === 'text' && viewingChannel === ch ? ' active-channel' : '');
+                    div.innerHTML = `
+                        <i class="ph ph-hash ch-icon"></i><span class="truncate flex-1">${ch}</span>
+                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                    `;
                     div.addEventListener('click', () => viewTextChannel(ch));
+                    div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'text', ch));
                     textList.appendChild(div);
                 });
 
@@ -623,9 +803,13 @@
                 voiceChannels.forEach(ch => {
                     const members = users.filter(u => u.voiceChannel === ch);
                     const div = document.createElement('div');
-                    div.className = 'channel-item' + (viewingType === 'voice' && viewingChannel === ch ? ' active-channel' : '');
-                    div.innerHTML = `<i class="ph ph-speaker-high ch-icon"></i><span class="truncate">${ch}</span>`;
+                    div.className = 'channel-item group' + (viewingType === 'voice' && viewingChannel === ch ? ' active-channel' : '');
+                    div.innerHTML = `
+                        <i class="ph ph-speaker-high ch-icon"></i><span class="truncate flex-1">${ch}</span>
+                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                    `;
                     div.addEventListener('click', () => joinVoiceChannel(ch));
+                    div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'voice', ch));
                     voiceList.appendChild(div);
 
                     members.forEach(m => {
@@ -708,6 +892,10 @@
                         <span class="text-xs text-zinc-300 truncate max-w-[100px]">${u.name}${isMe ? ' (Você)' : ''}</span>
                         ${watchBtn}
                     `;
+                    if (!isMe) {
+                        chip.title = 'Clique com o botão direito para ajustar o volume';
+                        attachVolumeContextMenu(chip, u.id, u.name);
+                    }
                     strip.appendChild(chip);
                 });
             }
@@ -799,11 +987,16 @@
                         <span class="live-dot-green tile-dot"></span>
                         <span class="tile-name">${label || getUserName(userId)}</span>
                     </div>
+                    <button class="tile-fullscreen" title="Tela cheia"><i class="ph ph-corners-out"></i></button>
                     <button class="tile-remove" title="Parar de assistir"><i class="ph ph-x"></i></button>
                 `;
                 tile.querySelector('.tile-remove').addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     unwatchStreamer(userId);
+                });
+                tile.querySelector('.tile-fullscreen').addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    toggleTileFullscreen(tile);
                 });
                 tile.addEventListener('dblclick', () => toggleTileFullscreen(tile));
                 videoGrid.appendChild(tile);
@@ -860,10 +1053,7 @@
                     v.muted = isMuted;
                     v.volume = masterVolume;
                 });
-                document.querySelectorAll('#voice-audio-container audio').forEach(a => {
-                    a.muted = isMuted || perUserMuted.has(a.dataset.voiceId);
-                    a.volume = masterVolume;
-                });
+                Object.keys(gainNodes).forEach(peerId => applyGainForUser(peerId));
             }
 
             function updateVolumeIcon() {
@@ -903,6 +1093,28 @@
                 }
             }
             btnFullscreen.addEventListener('click', toggleFullscreen);
+
+            // ==========================================
+            // OCULTAR/MOSTRAR PAINEL DE PARTICIPANTES
+            // ==========================================
+            const participantsSidebar = document.getElementById('participants-sidebar');
+            function applyParticipantsVisibility(hidden) {
+                if (hidden) {
+                    participantsSidebar.classList.add('hidden');
+                    participantsSidebar.classList.remove('md:flex');
+                } else {
+                    participantsSidebar.classList.remove('hidden');
+                    participantsSidebar.classList.add('md:flex');
+                }
+            }
+            let participantsHidden = localStorage.getItem('ssp-hide-participants') === '1';
+            applyParticipantsVisibility(participantsHidden);
+
+            document.getElementById('btn-toggle-participants').addEventListener('click', () => {
+                participantsHidden = !participantsHidden;
+                localStorage.setItem('ssp-hide-participants', participantsHidden ? '1' : '0');
+                applyParticipantsVisibility(participantsHidden);
+            });
 
             function renderRoomList(rooms) {
                 const container = document.getElementById('rooms-list-container');
@@ -1310,20 +1522,29 @@
                         channelBadge = `<span class="text-[10px] text-emerald-400 flex items-center gap-1 flex-shrink-0"><i class="ph ph-speaker-high"></i> ${u.voiceChannel}</span>`;
                     }
 
-                    let muteHtml = '';
-                    if (!isMe) {
+                    let actionHtml = '';
+                    if (isMe) {
+                        actionHtml = `<button class="text-zinc-500 hover:text-white flex-shrink-0" onclick="window.startEditOwnName(event)" title="Mudar meu nome">
+                                          <i class="ph ph-pencil-simple text-sm"></i>
+                                       </button>`;
+                    } else {
                         const muted = perUserMuted.has(u.id);
-                        muteHtml = `<button class="text-zinc-400 hover:text-white flex-shrink-0" onclick="window.toggleUserMute('${u.id}')" title="${muted ? 'Reativar áudio deste participante' : 'Silenciar este participante'}">
+                        actionHtml = `<button class="text-zinc-400 hover:text-white flex-shrink-0" onclick="window.toggleUserMute('${u.id}')" title="${muted ? 'Reativar áudio deste participante' : 'Silenciar este participante'}">
                                         <i class="ph ${muted ? 'ph-speaker-simple-slash' : 'ph-speaker-simple-high'} text-sm"></i>
                                      </button>`;
                     }
 
                     div.innerHTML = `
                         <div class="w-8 h-8 rounded-full flex-shrink-0 ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
-                        <span class="text-sm text-zinc-300 truncate flex-1">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
+                        <span class="text-sm text-zinc-300 truncate flex-1" id="${isMe ? 'own-name-label' : ''}">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
                         ${channelBadge}
-                        ${muteHtml}
+                        ${actionHtml}
                     `;
+
+                    if (!isMe) {
+                        div.title = 'Clique com o botão direito para ajustar o volume dessa pessoa';
+                        attachVolumeContextMenu(div, u.id, u.name);
+                    }
 
                     usersListEl.appendChild(div);
                 });
@@ -1338,6 +1559,21 @@
                 }
                 renderChannelSidebar();
                 renderMainView();
+            });
+
+            socket.on('channel-renamed', ({ oldName, newName }) => {
+                if (myVoiceChannel === oldName) myVoiceChannel = newName;
+                if (viewingChannel === oldName) viewingChannel = newName;
+                showToast('Canal', `"${oldName}" agora é "${newName}".`);
+                renderChannelSidebar();
+                renderMainView();
+            });
+
+            socket.on('room-renamed', ({ newName }) => {
+                currentRoom = newName;
+                statusText.textContent = newName;
+                showToast('Sala', `Essa sala agora se chama "${newName}".`);
+                renderChannelSidebar();
             });
 
             socket.on('chat-history', (history) => {
@@ -1413,6 +1649,7 @@
                 const myUsername = inputUsername.value.trim() || 'Participante';
                 if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
 
+                localStorage.setItem('ssp-username', myUsername);
                 document.getElementById('connection-modal').classList.add('hidden');
                 currentRoom = roomName;
                 statusDot.className = 'w-2 h-2 rounded-full bg-green-500';

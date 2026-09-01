@@ -10,11 +10,13 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-const TEXT_CHANNELS = ['geral', 'off-topic'];
-const VOICE_CHANNELS = ['Sala 1', 'Sala 2', 'Sala 3'];
+const DEFAULT_TEXT_CHANNELS = ['geral', 'off-topic'];
+const DEFAULT_VOICE_CHANNELS = ['Sala 1', 'Sala 2', 'Sala 3'];
 const MAX_MESSAGES_PER_CHANNEL = 200;
+const MAX_NAME_LENGTH = 40;
 
 const rooms = new Map(); // roomId -> Set de socket ids (todo mundo no servidor/sala)
+const roomChannels = new Map(); // roomId -> { text: string[], voice: string[] }
 const roomVoiceMembers = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomBroadcasters = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomMessages = new Map(); // roomId -> Map<canalDeTexto, Array<mensagem>>
@@ -23,14 +25,27 @@ function getRoomList() {
   return Array.from(rooms.keys());
 }
 
+function cleanName(raw, maxLen) {
+  return (raw || '').toString().trim().slice(0, maxLen);
+}
+
 function ensureRoomStructures(roomId) {
+  if (!roomChannels.has(roomId)) {
+    roomChannels.set(roomId, { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
+  }
   if (!roomVoiceMembers.has(roomId)) roomVoiceMembers.set(roomId, new Map());
   if (!roomBroadcasters.has(roomId)) roomBroadcasters.set(roomId, new Map());
   if (!roomMessages.has(roomId)) {
     const m = new Map();
-    TEXT_CHANNELS.forEach(c => m.set(c, []));
+    roomChannels.get(roomId).text.forEach(c => m.set(c, []));
     roomMessages.set(roomId, m);
   }
+}
+
+function sendChannelsInfo(roomId) {
+  const channels = roomChannels.get(roomId);
+  if (!channels) return;
+  io.to(roomId).emit('channels-info', { textChannels: channels.text, voiceChannels: channels.voice });
 }
 
 // Junta a lista de usuários com canal de voz e status de "Ao Vivo"
@@ -51,9 +66,11 @@ function broadcastUserList(roomId) {
 }
 
 function broadcastVoiceChannels(roomId) {
+  const channels = roomChannels.get(roomId);
   const voiceMembers = roomVoiceMembers.get(roomId) || new Map();
+  if (!channels) return;
   const payload = {};
-  VOICE_CHANNELS.forEach(c => {
+  channels.voice.forEach(c => {
     payload[c] = Array.from(voiceMembers.get(c) || []).map(id => ({
       id,
       name: io.sockets.sockets.get(id)?.data.username || 'Anônimo'
@@ -82,6 +99,13 @@ function leaveCurrentVoiceChannel(socket) {
   socket.data.voiceChannel = null;
 }
 
+function renameMapKey(map, oldKey, newKey) {
+  if (map && map.has(oldKey) && !map.has(newKey)) {
+    map.set(newKey, map.get(oldKey));
+    map.delete(oldKey);
+  }
+}
+
 io.on('connection', (socket) => {
   console.log('Cliente conectado:', socket.id);
 
@@ -96,15 +120,16 @@ io.on('connection', (socket) => {
     ensureRoomStructures(roomId);
     rooms.get(roomId).add(socket.id);
     socket.join(roomId);
-    socket.data.username = username || 'Anônimo';
+    socket.data.username = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
     socket.data.room = roomId;
     socket.data.voiceChannel = null;
 
-    socket.emit('channels-info', { textChannels: TEXT_CHANNELS, voiceChannels: VOICE_CHANNELS });
+    sendChannelsInfo(roomId);
 
+    const channels = roomChannels.get(roomId);
     const messages = roomMessages.get(roomId);
     const history = {};
-    TEXT_CHANNELS.forEach(c => { history[c] = messages.get(c) || []; });
+    channels.text.forEach(c => { history[c] = messages.get(c) || []; });
     socket.emit('chat-history', history);
 
     broadcastUserList(roomId);
@@ -114,9 +139,73 @@ io.on('connection', (socket) => {
     io.emit('rooms-update', getRoomList());
   });
 
+  socket.on('rename-self', ({ newName }) => {
+    const room = socket.data.room;
+    const trimmed = cleanName(newName, MAX_NAME_LENGTH);
+    if (!trimmed) return;
+    socket.data.username = trimmed;
+    if (room) broadcastUserList(room);
+  });
+
+  socket.on('rename-room', ({ newName }) => {
+    const oldRoom = socket.data.room;
+    const trimmed = cleanName(newName, MAX_NAME_LENGTH);
+    if (!oldRoom || !trimmed || trimmed === oldRoom || rooms.has(trimmed)) return;
+
+    const memberIds = Array.from(rooms.get(oldRoom) || []);
+    memberIds.forEach(id => {
+      const s = io.sockets.sockets.get(id);
+      if (s) {
+        s.leave(oldRoom);
+        s.join(trimmed);
+        s.data.room = trimmed;
+      }
+    });
+
+    renameMapKey(rooms, oldRoom, trimmed);
+    renameMapKey(roomChannels, oldRoom, trimmed);
+    renameMapKey(roomVoiceMembers, oldRoom, trimmed);
+    renameMapKey(roomBroadcasters, oldRoom, trimmed);
+    renameMapKey(roomMessages, oldRoom, trimmed);
+
+    io.to(trimmed).emit('room-renamed', { newName: trimmed });
+    io.emit('rooms-update', getRoomList());
+  });
+
+  socket.on('rename-channel', ({ type, oldName, newName }) => {
+    const room = socket.data.room;
+    const trimmed = cleanName(newName, MAX_NAME_LENGTH);
+    if (!room || !trimmed) return;
+    const channels = roomChannels.get(room);
+    if (!channels) return;
+
+    const list = type === 'text' ? channels.text : type === 'voice' ? channels.voice : null;
+    if (!list) return;
+    const idx = list.indexOf(oldName);
+    if (idx === -1 || list.includes(trimmed)) return;
+    list[idx] = trimmed;
+
+    if (type === 'text') {
+      renameMapKey(roomMessages.get(room), oldName, trimmed);
+    } else {
+      renameMapKey(roomVoiceMembers.get(room), oldName, trimmed);
+      renameMapKey(roomBroadcasters.get(room), oldName, trimmed);
+      rooms.get(room)?.forEach(id => {
+        const s = io.sockets.sockets.get(id);
+        if (s && s.data.voiceChannel === oldName) s.data.voiceChannel = trimmed;
+      });
+    }
+
+    io.to(room).emit('channel-renamed', { type, oldName, newName: trimmed });
+    sendChannelsInfo(room);
+    broadcastUserList(room);
+    broadcastVoiceChannels(room);
+  });
+
   socket.on('send-message', ({ channel, text }) => {
     const room = socket.data.room;
-    if (!room || !TEXT_CHANNELS.includes(channel)) return;
+    const channels = room ? roomChannels.get(room) : null;
+    if (!room || !channels || !channels.text.includes(channel)) return;
     const trimmed = (text || '').toString().slice(0, 2000).trim();
     if (!trimmed) return;
 
@@ -139,7 +228,8 @@ io.on('connection', (socket) => {
 
   socket.on('join-voice-channel', ({ channel }) => {
     const room = socket.data.room;
-    if (!room || !VOICE_CHANNELS.includes(channel)) return;
+    const channels = room ? roomChannels.get(room) : null;
+    if (!room || !channels || !channels.voice.includes(channel)) return;
     if (socket.data.voiceChannel === channel) return;
 
     leaveCurrentVoiceChannel(socket);
@@ -220,6 +310,7 @@ io.on('connection', (socket) => {
         rooms.get(room).delete(socket.id);
         if (rooms.get(room).size === 0) {
           rooms.delete(room);
+          roomChannels.delete(room);
           roomVoiceMembers.delete(room);
           roomBroadcasters.delete(room);
           roomMessages.delete(room);

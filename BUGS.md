@@ -1,0 +1,69 @@
+# Bugs encontrados e correções
+
+Registro de bugs reais encontrados durante o desenvolvimento (não é changelog de
+features — só problemas e como foram resolvidos). Mantido atualizado a cada
+sessão.
+
+---
+
+## 2026-09-01
+
+### Eco / vozes duplicadas ao compartilhar "Áudio do Sistema"
+- **Sintoma**: quem assistia a tela de alguém compartilhando com "Áudio do
+  Sistema" ligado ouvia a própria voz de volta (eco), ou ouvia as vozes do
+  chat de voz em dobro.
+- **Causa**: a captura de "Áudio do Sistema" no Windows pega literalmente
+  tudo que está tocando no PC de quem compartilha — inclusive o que essa
+  pessoa está ouvindo pelo chat de voz. Isso volta pra rede junto com o
+  compartilhamento de tela.
+- **Correção**: ao ligar "Áudio do Sistema", o app agora silencia
+  automaticamente (só do lado de quem compartilha) o que essa pessoa ouve dos
+  outros, restaurando o estado anterior ao parar de compartilhar. O
+  microfone dela continua saindo normalmente.
+
+### Tela preta ao assistir alguém que também está te assistindo
+- **Sintoma**: quando duas pessoas compartilhavam tela e assistiam uma à
+  outra ao mesmo tempo, uma das duas ficava com a tela do outro preta.
+- **Causa**: `handleCandidate` escolhia entre `viewerPeers` e `senderPeers`
+  só pelo id de quem mandou o candidato ICE (`viewerPeers[id] ||
+  senderPeers[id]`). Quando as duas conexões existiam ao mesmo tempo pro
+  mesmo par de pessoas, os candidatos de uma conexão podiam ser aplicados na
+  conexão errada, quebrando a negociação ICE de um dos dois lados.
+- **Correção**: cada candidato ICE de compartilhamento de tela agora carrega
+  um rótulo (`screen-broadcast` / `screen-view`) que identifica sem
+  ambiguidade a qual conexão ele pertence — o mesmo padrão já usado pro chat
+  de voz (`kind: 'voice'`).
+- **Validado**: teste automatizado com duas instâncias compartilhando e
+  assistindo uma à outra simultaneamente.
+
+### Botão de "editar meu nome" não fazia nada
+- **Sintoma**: clicar no lápis pra mudar o próprio nome na lista de
+  participantes não abria o popup de renomear.
+- **Causa**: o `onclick="window.startEditOwnName()"` não passava o evento de
+  clique pra função, que precisa dele (`e.stopPropagation()` e
+  `e.clientX/clientY` pra posicionar o popup) — chamando sem argumento,
+  `e` ficava `undefined` e a função quebrava silenciosamente (o erro
+  acontece dentro do handler inline do HTML, que não aparece no console
+  principal do app).
+- **Correção**: `onclick="window.startEditOwnName(event)"`.
+- **Como foi encontrado**: teste automatizado clicando no botão e conferindo
+  se o próprio nome realmente mudava na lista — sem esse teste, o bug
+  passaria despercebido numa checagem visual rápida.
+
+## Limitações conhecidas (não são bugs do app)
+
+### "Tela cheia" é a única opção pra quem está com um jogo em modo exclusivo
+Quando um jogo roda em "Tela Cheia" (exclusiva, não "sem bordas"), o Windows
+desliga o compositor de janelas (DWM) pra esse app ter controle total da
+tela. Nesse modo, `desktopCapturer.getSources({types:['window','screen']})`
+não consegue gerar miniatura de nenhuma janela, só da tela toda — afeta
+qualquer programa de captura (OBS, Discord, etc), não é específico desse
+app. Solução: usar "Tela Cheia sem Bordas" / "Janela sem Borda" nas opções
+gráficas do jogo.
+
+### Sem servidor TURN, só STUN
+O app usa só `stun:stun.l.google.com:19302`. Isso cobre a maioria das redes,
+mas pode falhar em conectar entre pessoas atrás de NAT muito restritivo
+(redes corporativas/universitárias, alguns roteadores 4G). Se algum dia
+duas pessoas específicas nunca conseguirem se conectar, esse costuma ser o
+motivo — a solução é configurar um servidor TURN, mas não é urgente hoje.
