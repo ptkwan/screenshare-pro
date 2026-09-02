@@ -57,3 +57,30 @@ Só na primeira instalação de cada pessoa (ou se alguém desinstalou o app).
 O instalador fica em `dist/ScreenShare Pro Setup X.Y.Z.exe` depois do build,
 ou disponível diretamente na página de releases:
 https://github.com/ptkwan/screenshare-pro/releases/latest
+
+## Windows bloqueando o download/instalação (SmartScreen)
+
+O instalador não é assinado digitalmente (não tem certificado de code
+signing), então o SmartScreen do Windows costuma avisar "O Windows
+protegeu o seu PC" na primeira instalação de cada pessoa — e isso volta a
+acontecer a cada release nova, porque o `.exe` de cada versão tem um hash
+diferente (a "reputação" que o SmartScreen guarda não passa de uma versão
+pra outra). Não é sinal de que o build saiu errado.
+
+O que fazer:
+
+- **De cara, avise quem for instalar:** na tela do SmartScreen, clicar em
+  "Mais informações" → "Executar assim mesmo" libera a instalação. Vale
+  colocar esse aviso na descrição de cada release do GitHub.
+- **Se quiser reduzir o atrito numa release específica:** dá pra submeter
+  o `.exe` pro [Microsoft Defender Security
+  Intelligence](https://www.microsoft.com/en-us/wdsi/filesubmission)
+  pedindo revisão do arquivo — costuma liberar o hash em 1-2 dias. Precisa
+  repetir a cada versão nova (hash muda a cada build).
+- **Solução definitiva (paga):** comprar um certificado de code signing
+  (~$70-250/ano, ex: SSL.com, Sectigo) e configurar o `electron-builder`
+  pra assinar o `.exe` automaticamente no build (`win.certificateFile` /
+  `win.certificatePassword` no `package.json`, ou variáveis de ambiente
+  equivalentes). Um certificado **EV** (mais caro) libera o SmartScreen
+  quase na hora; um certificado comum (OV) ainda constrói reputação com o
+  tempo, mas bem mais rápido que sem assinatura nenhuma.

@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Nova função para receber o IP do servidor
     onServerFound: (callback) => ipcRenderer.on('server-found', (event, url) => callback(url)),
 
+    // Notificação nativa de nova mensagem no chat -- o Main Process decide se
+    // mostra (só quando a janela NÃO está em foco); o preload só repassa o
+    // aviso, sem lógica nenhuma aqui.
+    notifyNewMessage: (payload) => ipcRenderer.send('chat-message-received', payload),
+
     // Áudio por aplicativo (captura só o processo da janela compartilhada)
     resolveWindowPid: (sourceId) => ipcRenderer.invoke('resolve-window-pid', sourceId),
     startAppAudioCapture: (pid) => ipcRenderer.invoke('start-app-audio-capture', pid),

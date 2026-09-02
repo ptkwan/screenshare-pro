@@ -33,6 +33,15 @@ const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a 
 const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcional)
 const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
 
+// Salas ocultas: não entram em getRoomList() (invisíveis na lista pública) e
+// só são encontradas por quem souber o código secreto exato -- o código É a
+// senha da sala (reaproveita roomPasswords/hashPassword), só que em vez de
+// digitar o NOME da sala pra depois ter que digitar a senha, quem entra digita
+// só o código num campo dedicado ("Entrar com Código") e a sala é descoberta
+// a partir dele.
+const roomHidden = new Set(); // roomId -> presente nesse Set == sala oculta
+const hiddenRoomCodeIndex = new Map(); // hash do código -> roomId (pra achar a sala sem saber o nome)
+
 // Fila de aprovação: quem entra numa sala já existente (e não é o dono) fica
 // pendente até o dono aprovar ou recusar. Fica só em memória mesmo (não faz
 // sentido persistir um "pedido de entrada" através de um restart -- a
@@ -70,6 +79,7 @@ function roomSnapshot(roomId) {
     ownerToken: roomOwnerTokens.get(roomId) || null,
     icon: roomIcons.get(roomId) || null,
     approvedNames: Array.from(roomApprovedNames.get(roomId) || []),
+    hidden: roomHidden.has(roomId),
   };
 }
 
@@ -111,6 +121,10 @@ async function loadRoomsFromRedis() {
       if (snap.passwordHash) roomPasswords.set(roomId, snap.passwordHash);
       if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
       if (snap.icon) roomIcons.set(roomId, snap.icon);
+      if (snap.hidden) {
+        roomHidden.add(roomId);
+        if (snap.passwordHash) hiddenRoomCodeIndex.set(snap.passwordHash, roomId);
+      }
       roomApprovedNames.set(roomId, new Set(snap.approvedNames || []));
       roomVoiceMembers.set(roomId, new Map());
       roomBroadcasters.set(roomId, new Map());
@@ -135,11 +149,31 @@ function notifyPendingJoins(roomId) {
 }
 
 function getRoomList() {
-  return Array.from(rooms.keys()).map(name => ({ name, hasPassword: roomPasswords.has(name), icon: roomIcons.get(name) || null }));
+  return Array.from(rooms.keys())
+    .filter(name => !roomHidden.has(name)) // salas ocultas nunca entram na lista pública
+    .map(name => ({ name, hasPassword: roomPasswords.has(name), icon: roomIcons.get(name) || null }));
 }
 
 function cleanName(raw, maxLen) {
   return (raw || '').toString().trim().slice(0, maxLen);
+}
+
+// O avatar sempre foi tratado como "qualquer string" (typeof avatar ===
+// 'string'), sem checar formato -- isso permitia quebrar o atributo
+// src="${user.avatar}" em avatarHtml() (index.html) com algo tipo
+// `x" onerror="..."` e injetar JS arbitrário, broadcast pra sala inteira
+// (e até pro DONO, via fila de aprovação, antes de ele aceitar o pedido).
+// Legítimo, o avatar SEMPRE é gerado por canvas.toDataURL('image/jpeg', ...)
+// no cliente -- então só aceita esse formato exato (alfabeto base64 não tem
+// nenhum caractere que quebre HTML/atributo, então isso já fecha a injeção
+// por conta própria, sem precisar confiar em escape feito no cliente).
+const AVATAR_DATA_URL_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+const MAX_AVATAR_LENGTH = 300_000; // mesmo teto já usado pro ícone de sala
+
+function sanitizeAvatar(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  if (raw.length > MAX_AVATAR_LENGTH) return null;
+  return AVATAR_DATA_URL_RE.test(raw) ? raw : null;
 }
 
 function hashPassword(pw) {
@@ -264,6 +298,11 @@ function completeJoin(socket, roomId) {
   socket.data.voiceChannel = null;
   socket.data.pendingRoom = null;
 
+  // Quem entra por código nunca soube o nome da sala de antemão (e no join
+  // normal o cliente já sabia, mas confirmar aqui não faz mal) -- sem isso,
+  // o cliente não tem como saber em qual sala ele efetivamente caiu.
+  socket.emit('room-joined', { roomId });
+
   sendChannelsInfo(roomId);
 
   const channels = roomChannels.get(roomId);
@@ -322,6 +361,61 @@ function removeFromRoom(socket, room) {
   }
 }
 
+// Parte final, compartilhada, de "entrar numa sala": aprovação pendente (se
+// for o caso), token de dono e completeJoin(). Usado tanto pelo join normal
+// (por nome) quanto pelo join por código de sala oculta -- depois que cada um
+// já decidiu QUAL sala é essa e QUE é permitido tentar entrar nela, o resto é
+// idêntico.
+function finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom }) {
+  ensureRoomStructures(roomId);
+
+  const cleanUsername = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
+  const cleanAvatar = sanitizeAvatar(avatar);
+  const isOwnerByToken = !isNewRoom && !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
+  const approvedSet = roomApprovedNames.get(roomId);
+  const alreadyApproved = !!approvedSet && approvedSet.has(cleanUsername);
+  // Sala persistente (fica de pé mesmo vazia) sem ninguém dentro agora --
+  // não tem ninguém pra aprovar, então entra direto, igual uma sala nova.
+  const roomCurrentlyEmpty = isNewRoom || rooms.get(roomId)?.size === 0;
+
+  // Sistema de aprovação: quem entra numa sala já existente e OCUPADA pela
+  // primeira vez (e não é o dono) fica pendente até o dono aprovar ou
+  // recusar pelo próprio app. Uma vez aprovado, o nome fica liberado --
+  // com Redis configurado, isso persiste através de reinícios do
+  // servidor junto com o resto da sala; sem Redis, só dura enquanto o
+  // processo ficar de pé.
+  if (!roomCurrentlyEmpty && !isOwnerByToken && !alreadyApproved) {
+    socket.data.username = cleanUsername;
+    socket.data.avatar = cleanAvatar;
+    socket.data.pendingRoom = roomId;
+    if (!roomPendingJoins.has(roomId)) roomPendingJoins.set(roomId, new Map());
+    roomPendingJoins.get(roomId).set(socket.id, { username: cleanUsername, avatar: cleanAvatar });
+
+    socket.emit('join-pending', { roomId });
+    notifyPendingJoins(roomId);
+    console.log(`[join-pending] ${socket.id} (${cleanUsername}) aguardando aprovação pra entrar em "${roomId}"`);
+    return;
+  }
+
+  socket.data.username = cleanUsername;
+  socket.data.avatar = cleanAvatar;
+  socket.data.pendingRoom = null;
+
+  // Dono da sala: quem cria recebe um token secreto (guardado só no cliente
+  // dele) que prova a autoria em futuras reconexões — sem isso, qualquer um
+  // que entrasse na sala poderia expulsar/renomear/aprovar à vontade.
+  if (isNewRoom) {
+    const token = crypto.randomBytes(16).toString('hex');
+    roomOwnerTokens.set(roomId, token);
+    socket.data.isOwner = true;
+    socket.emit('owner-token', { roomId, token });
+  } else {
+    socket.data.isOwner = isOwnerByToken;
+  }
+
+  completeJoin(socket, roomId);
+}
+
 function renameMapKey(map, oldKey, newKey) {
   if (map && map.has(oldKey) && !map.has(newKey)) {
     map.set(newKey, map.get(oldKey));
@@ -337,7 +431,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', (payload) => {
-    const { username, avatar, password, ownerToken } = payload || {};
+    const { username, avatar, password, ownerToken, hidden } = payload || {};
     // roomId nunca era validado/limpo aqui -- qualquer string (incluindo lixo
     // tipo "[object Object]" vindo de um bug em outro lugar) virava o nome
     // literal e permanente da sala, sem chance de correção.
@@ -365,59 +459,62 @@ io.on('connection', (socket) => {
       clearAttempts(attemptKey);
     }
 
-    if (isNewRoom) {
-      rooms.set(roomId, new Set());
-      if (password) roomPasswords.set(roomId, hashPassword(password));
-      roomApprovedNames.set(roomId, new Set());
-      markRoomDirty(roomId);
-    }
-    ensureRoomStructures(roomId);
-
-    const cleanUsername = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
-    const cleanAvatar = typeof avatar === 'string' ? avatar : null;
-    const isOwnerByToken = !isNewRoom && !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
-    const approvedSet = roomApprovedNames.get(roomId);
-    const alreadyApproved = !!approvedSet && approvedSet.has(cleanUsername);
-    // Sala persistente (fica de pé mesmo vazia) sem ninguém dentro agora --
-    // não tem ninguém pra aprovar, então entra direto, igual uma sala nova.
-    const roomCurrentlyEmpty = isNewRoom || rooms.get(roomId)?.size === 0;
-
-    // Sistema de aprovação: quem entra numa sala já existente e OCUPADA pela
-    // primeira vez (e não é o dono) fica pendente até o dono aprovar ou
-    // recusar pelo próprio app. Uma vez aprovado, o nome fica liberado --
-    // com Redis configurado, isso persiste através de reinícios do
-    // servidor junto com o resto da sala; sem Redis, só dura enquanto o
-    // processo ficar de pé.
-    if (!roomCurrentlyEmpty && !isOwnerByToken && !alreadyApproved) {
-      socket.data.username = cleanUsername;
-      socket.data.avatar = cleanAvatar;
-      socket.data.pendingRoom = roomId;
-      if (!roomPendingJoins.has(roomId)) roomPendingJoins.set(roomId, new Map());
-      roomPendingJoins.get(roomId).set(socket.id, { username: cleanUsername, avatar: cleanAvatar });
-
-      socket.emit('join-pending', { roomId });
-      notifyPendingJoins(roomId);
-      console.log(`[join-pending] ${socket.id} (${cleanUsername}) aguardando aprovação pra entrar em "${roomId}"`);
+    // Sala oculta: o código secreto É a senha da sala (mesmo campo, mesmo
+    // hash) -- só existe pra quem tá CRIANDO a sala agora. Sem código não tem
+    // como ninguém nunca mais achar essa sala (ela não aparece na lista
+    // pública e não tem outro jeito de entrar a não ser pelo código), então
+    // isso é bloqueado antes de criar qualquer coisa.
+    if (isNewRoom && hidden && !password) {
+      socket.emit('join-error', { reason: 'hidden-room-requires-code' });
       return;
     }
 
-    socket.data.username = cleanUsername;
-    socket.data.avatar = cleanAvatar;
-    socket.data.pendingRoom = null;
-
-    // Dono da sala: quem cria recebe um token secreto (guardado só no cliente
-    // dele) que prova a autoria em futuras reconexões — sem isso, qualquer um
-    // que entrasse na sala poderia expulsar/renomear/aprovar à vontade.
     if (isNewRoom) {
-      const token = crypto.randomBytes(16).toString('hex');
-      roomOwnerTokens.set(roomId, token);
-      socket.data.isOwner = true;
-      socket.emit('owner-token', { roomId, token });
-    } else {
-      socket.data.isOwner = isOwnerByToken;
+      rooms.set(roomId, new Set());
+      if (password) roomPasswords.set(roomId, hashPassword(password));
+      if (hidden) {
+        roomHidden.add(roomId);
+        hiddenRoomCodeIndex.set(hashPassword(password), roomId);
+      }
+      roomApprovedNames.set(roomId, new Set());
+      markRoomDirty(roomId);
     }
 
-    completeJoin(socket, roomId);
+    finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom });
+  });
+
+  // Entrar numa sala oculta só pelo código secreto -- sem saber (nem
+  // precisar saber) o nome dela. O código já FOI a senha lá na criação, então
+  // validar aqui é achar no índice reverso (hash do código -> sala) em vez de
+  // comparar contra a senha de uma sala específica.
+  socket.on('join-by-code', (payload) => {
+    const { username, avatar, ownerToken } = payload || {};
+    const code = (payload?.code || '').toString().trim();
+    // Não dá pra travar por "ip|sala" igual senha normal -- quem tá tentando
+    // ainda não sabe (e não pode saber) o nome da sala. Trava só por IP.
+    const attemptKey = `${socket.handshake.address}|__hidden_code__`;
+
+    if (isLockedOut(attemptKey)) {
+      console.log(`[join-by-code] ${socket.id} bloqueado por excesso de tentativas de código`);
+      socket.emit('join-by-code-error', { reason: 'too-many-attempts' });
+      return;
+    }
+    if (!code) {
+      socket.emit('join-by-code-error', { reason: 'invalid-code' });
+      return;
+    }
+
+    const roomId = hiddenRoomCodeIndex.get(hashPassword(code));
+    if (!roomId || !rooms.has(roomId)) {
+      registerFailedAttempt(attemptKey);
+      console.log(`[join-by-code] ${socket.id} (${username}) tentou um código que não bate com nenhuma sala oculta`);
+      socket.emit('join-by-code-error', { reason: 'not-found' });
+      return;
+    }
+    clearAttempts(attemptKey);
+
+    console.log(`[join-by-code] ${socket.id} (${username}) achou a sala oculta "${roomId}" pelo código`);
+    finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom: false });
   });
 
   // Dono aprova quem tá esperando -- move da fila pendente pra dentro da sala.
@@ -499,7 +596,7 @@ io.on('connection', (socket) => {
   socket.on('update-avatar', ({ avatar }) => {
     const room = socket.data.room;
     if (!room) return;
-    socket.data.avatar = typeof avatar === 'string' && avatar ? avatar : null;
+    socket.data.avatar = sanitizeAvatar(avatar);
     broadcastUserList(room);
   });
 
@@ -532,6 +629,14 @@ io.on('connection', (socket) => {
     renameMapKey(roomIcons, oldRoom, trimmed);
     renameMapKey(roomPendingJoins, oldRoom, trimmed);
     renameMapKey(roomApprovedNames, oldRoom, trimmed);
+    if (roomHidden.has(oldRoom)) {
+      roomHidden.delete(oldRoom);
+      roomHidden.add(trimmed);
+      // O código continua o mesmo (mesmo hash) -- só o valor que ele aponta
+      // no índice reverso precisa acompanhar o novo nome.
+      const codeHash = roomPasswords.get(trimmed);
+      if (codeHash) hiddenRoomCodeIndex.set(codeHash, trimmed);
+    }
     deleteRoomFromRedis(oldRoom); // a sala "velha" não existe mais sob esse nome
     markRoomDirty(trimmed);
 
@@ -710,15 +815,32 @@ io.on('connection', (socket) => {
     setTimeout(() => doDisconnect(false), 1500);
   });
 
-  socket.on('offer', ({ target, sdp, caller }) => {
+  // Retransmissão de sinalização WebRTC (voz e compartilhamento de tela) --
+  // só entre quem está na MESMA sala. Antes disso, `target` era só um
+  // socket.id qualquer sem checar sala nenhuma: qualquer socket conectado
+  // (de outra sala, ou de nenhuma) conseguia mandar um 'offer' forjado pra
+  // vítima e o cliente respondia automaticamente sem checar se o remetente é
+  // membro conhecido -- na prática, dava pra iniciar uma conexão de voz com
+  // alguém fora da sua sala e captar o microfone dela sem consentimento.
+  function isRoommate(socket, targetId) {
+    const room = socket.data.room;
+    if (!room) return false;
+    const targetSocket = io.sockets.sockets.get(targetId);
+    return !!targetSocket && targetSocket.data.room === room;
+  }
+
+  socket.on('offer', ({ target, sdp }) => {
+    if (!isRoommate(socket, target)) return;
     io.to(target).emit('offer', { caller: socket.id, sdp });
   });
 
-  socket.on('answer', ({ target, sdp, answerer }) => {
+  socket.on('answer', ({ target, sdp }) => {
+    if (!isRoommate(socket, target)) return;
     io.to(target).emit('answer', { answerer: socket.id, sdp });
   });
 
-  socket.on('ice-candidate', ({ target, candidate, sender }) => {
+  socket.on('ice-candidate', ({ target, candidate }) => {
+    if (!isRoommate(socket, target)) return;
     io.to(target).emit('ice-candidate', { sender: socket.id, candidate });
   });
 

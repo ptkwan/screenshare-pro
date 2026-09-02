@@ -1,4 +1,4 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, Notification } = require('electron');
 const path = require('path');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -38,9 +38,65 @@ app.on('window-all-closed', () => {
 
 ipcMain.on('close-app', () => app.quit());
 
+// ==========================================
+// NOTIFICAÇÃO NATIVA DE NOVA MENSAGEM NO CHAT
+// ==========================================
+// Fica no Main Process de propósito: quem decide se a janela está "em foco"
+// é o próprio SO via BrowserWindow.isFocused(), não o renderer. O renderer
+// não é confiável pra essa decisão (poderia ter sido adulterado via devtools,
+// ou só estar com `document.hasFocus()` inconsistente entre plataformas) --
+// então ele só avisa "chegou mensagem" (+ se já tá olhando esse canal), e
+// quem decide se mostra a notificação é sempre o Main.
+// Usa `ipcRenderer.send` (fire-and-forget) em vez de `invoke`: não precisa de
+// resposta, e isso evita a Promise/round-trip de um `invoke` numa mensagem de
+// chat (que pode chegar em rajada) -- mais barato, sem trade-off nenhum aqui,
+// já que quem manda o texto pro toast/notificação é sempre string simples,
+// não HTML (Notification nativa não faz parsing de markup, então não tem
+// risco de injeção mesmo sem escapar o texto).
+const MAX_NOTIFICATION_BODY_LENGTH = 200;
+
+ipcMain.on('chat-message-received', (event, payload) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // Só pula a notificação quando a pessoa realmente não precisa dela: janela
+    // em foco E o canal daquela mensagem já aberto na tela (ela literalmente
+    // acabou de ver o texto aparecer). Em foco mas olhando outro canal (ou a
+    // área de voz) ainda notifica -- só porque o app tá aberto não quer dizer
+    // que ela viu a mensagem.
+    const isViewingChannel = payload?.isViewingChannel === true;
+    if (mainWindow.isFocused() && isViewingChannel) return;
+    if (!Notification.isSupported()) return;
+
+    const channelName = typeof payload?.channelName === 'string' ? payload.channelName : '';
+    const userName = typeof payload?.userName === 'string' && payload.userName ? payload.userName : 'Alguém';
+    const text = typeof payload?.text === 'string' ? payload.text.slice(0, MAX_NOTIFICATION_BODY_LENGTH) : '';
+    if (!text) return;
+
+    const notification = new Notification({
+        title: channelName ? `${userName} em #${channelName}` : userName,
+        body: text,
+        silent: false,
+    });
+    notification.on('click', () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+    });
+    notification.show();
+});
+
 ipcMain.handle('GET_SOURCES', async () => {
     const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
-    return sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
+    // Nunca deixa listar a própria janela do app como fonte pra compartilhar --
+    // além de não fazer sentido pra ninguém, se a pessoa escolher "Áudio do
+    // Sistema" nessa janela, a captura nativa por processo pega justamente o
+    // <audio> do chat de voz tocando localmente e manda de volta pra sala,
+    // causando eco pra quem está do outro lado (quem fala ouve a própria voz
+    // repetida com atraso).
+    const ownSourceId = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getMediaSourceId() : null;
+    return sources
+        .filter(s => s.id !== ownSourceId)
+        .map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
 });
 
 // ==========================================
