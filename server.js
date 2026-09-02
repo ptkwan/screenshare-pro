@@ -3,6 +3,7 @@ const http = require('http');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const { Redis } = require('@upstash/redis');
 
 const app = express();
 app.use(cors());
@@ -33,11 +34,92 @@ const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcio
 const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
 
 // Fila de aprovação: quem entra numa sala já existente (e não é o dono) fica
-// pendente até o dono aprovar ou recusar. Tudo em memória (some se o
-// servidor reiniciar) -- não tem banco de dados nesse app ainda, então não
-// dá pra persistir "membros aprovados" além da vida do processo.
+// pendente até o dono aprovar ou recusar. Fica só em memória mesmo (não faz
+// sentido persistir um "pedido de entrada" através de um restart -- a
+// pessoa nem estaria mais conectada).
 const roomPendingJoins = new Map(); // roomId -> Map<socketId, { username, avatar }>
-const roomApprovedNames = new Map(); // roomId -> Set<username> (aprovados nessa sessão do servidor)
+const roomApprovedNames = new Map(); // roomId -> Set<username> (quem já foi aprovado nessa sala)
+
+// ==========================================
+// PERSISTÊNCIA (Upstash Redis, opcional) -- sem UPSTASH_REDIS_REST_URL e
+// UPSTASH_REDIS_REST_TOKEN configurados, o app funciona exatamente como
+// antes (tudo só em memória, some se o processo reiniciar). Com as
+// variáveis configuradas, as salas sobrevivem a reinícios do servidor.
+// ==========================================
+const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
+  : null;
+
+if (!redis) {
+  console.log('[redis] UPSTASH_REDIS_REST_URL/TOKEN não configurados -- salas só na memória (não sobrevivem a um restart do servidor).');
+}
+
+const REDIS_ROOM_PREFIX = 'roshan:room:';
+const REDIS_FLUSH_INTERVAL_MS = 5000; // agrupa gravações em vez de uma por mensagem/evento
+const dirtyRooms = new Set();
+
+function markRoomDirty(roomId) {
+  if (redis) dirtyRooms.add(roomId);
+}
+
+function roomSnapshot(roomId) {
+  return {
+    channels: roomChannels.get(roomId),
+    messages: Object.fromEntries(roomMessages.get(roomId) || []),
+    passwordHash: roomPasswords.get(roomId) || null,
+    ownerToken: roomOwnerTokens.get(roomId) || null,
+    icon: roomIcons.get(roomId) || null,
+    approvedNames: Array.from(roomApprovedNames.get(roomId) || []),
+  };
+}
+
+async function flushDirtyRooms() {
+  if (!redis || dirtyRooms.size === 0) return;
+  const toFlush = Array.from(dirtyRooms);
+  dirtyRooms.clear();
+  for (const roomId of toFlush) {
+    if (!rooms.has(roomId)) continue; // renomeada ou não existe mais sob esse nome
+    try {
+      await redis.set(REDIS_ROOM_PREFIX + roomId, roomSnapshot(roomId));
+    } catch (e) {
+      console.error(`[redis] falha ao salvar sala "${roomId}":`, e.message);
+      dirtyRooms.add(roomId); // tenta de novo na próxima leva
+    }
+  }
+}
+if (redis) setInterval(flushDirtyRooms, REDIS_FLUSH_INTERVAL_MS);
+
+async function deleteRoomFromRedis(roomId) {
+  if (!redis) return;
+  try { await redis.del(REDIS_ROOM_PREFIX + roomId); } catch (e) { console.error('[redis] falha ao apagar sala antiga do banco:', e.message); }
+}
+
+// Recupera todas as salas salvas ANTES do servidor aceitar conexões --
+// assim, na visão de quem conecta, é como se o processo nunca tivesse
+// reiniciado (exceto quem já tava conectado, que precisa entrar de novo).
+async function loadRoomsFromRedis() {
+  if (!redis) return;
+  try {
+    const keys = await redis.keys(REDIS_ROOM_PREFIX + '*');
+    for (const key of keys) {
+      const roomId = key.slice(REDIS_ROOM_PREFIX.length);
+      const snap = await redis.get(key);
+      if (!snap) continue;
+      rooms.set(roomId, new Set());
+      roomChannels.set(roomId, snap.channels || { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
+      roomMessages.set(roomId, new Map(Object.entries(snap.messages || {})));
+      if (snap.passwordHash) roomPasswords.set(roomId, snap.passwordHash);
+      if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
+      if (snap.icon) roomIcons.set(roomId, snap.icon);
+      roomApprovedNames.set(roomId, new Set(snap.approvedNames || []));
+      roomVoiceMembers.set(roomId, new Map());
+      roomBroadcasters.set(roomId, new Map());
+    }
+    console.log(`[redis] ${keys.length} sala(s) recuperada(s) do banco.`);
+  } catch (e) {
+    console.error('[redis] falha ao carregar salas salvas -- iniciando só com o que tiver em memória:', e.message);
+  }
+}
 
 function notifyPendingJoins(roomId) {
   const pending = roomPendingJoins.get(roomId);
@@ -212,8 +294,9 @@ function removeFromRoom(socket, room) {
   if (rooms.get(room).size === 0) {
     // A sala fica de pé mesmo vazia -- canais, mensagens, senha, ícone e
     // token de dono continuam guardados (pedido explícito: "não tem como
-    // ficarem de pé pra sempre?"). Só não sobrevive a um restart do
-    // processo do servidor -- não tem banco de dados, é tudo em memória.
+    // ficarem de pé pra sempre?"). Com Redis configurado, isso sobrevive
+    // até a um restart do processo; sem Redis, só dura enquanto o processo
+    // ficar de pé (tudo em memória).
     //
     // Quem tava esperando aprovação entra direto agora: não tem mais
     // ninguém pra aprovar, não faz sentido deixar preso pra sempre.
@@ -227,6 +310,7 @@ function removeFromRoom(socket, room) {
         if (!roomApprovedNames.has(room)) roomApprovedNames.set(room, new Set());
         roomApprovedNames.get(room).add(s.data.username);
         completeJoin(s, room);
+        markRoomDirty(room);
       });
     } else {
       io.emit('rooms-update', getRoomList());
@@ -285,6 +369,7 @@ io.on('connection', (socket) => {
       rooms.set(roomId, new Set());
       if (password) roomPasswords.set(roomId, hashPassword(password));
       roomApprovedNames.set(roomId, new Set());
+      markRoomDirty(roomId);
     }
     ensureRoomStructures(roomId);
 
@@ -299,9 +384,10 @@ io.on('connection', (socket) => {
 
     // Sistema de aprovação: quem entra numa sala já existente e OCUPADA pela
     // primeira vez (e não é o dono) fica pendente até o dono aprovar ou
-    // recusar pelo próprio app. Uma vez aprovado, o nome fica liberado
-    // enquanto o servidor não reiniciar (sem banco de dados ainda, não
-    // persiste além disso).
+    // recusar pelo próprio app. Uma vez aprovado, o nome fica liberado --
+    // com Redis configurado, isso persiste através de reinícios do
+    // servidor junto com o resto da sala; sem Redis, só dura enquanto o
+    // processo ficar de pé.
     if (!roomCurrentlyEmpty && !isOwnerByToken && !alreadyApproved) {
       socket.data.username = cleanUsername;
       socket.data.avatar = cleanAvatar;
@@ -351,6 +437,7 @@ io.on('connection', (socket) => {
 
     if (!roomApprovedNames.has(room)) roomApprovedNames.set(room, new Set());
     roomApprovedNames.get(room).add(entry.username);
+    markRoomDirty(room);
 
     targetSocket.data.isOwner = false;
     completeJoin(targetSocket, room);
@@ -445,6 +532,8 @@ io.on('connection', (socket) => {
     renameMapKey(roomIcons, oldRoom, trimmed);
     renameMapKey(roomPendingJoins, oldRoom, trimmed);
     renameMapKey(roomApprovedNames, oldRoom, trimmed);
+    deleteRoomFromRedis(oldRoom); // a sala "velha" não existe mais sob esse nome
+    markRoomDirty(trimmed);
 
     io.to(trimmed).emit('room-renamed', { newName: trimmed });
     io.emit('rooms-update', getRoomList());
@@ -462,6 +551,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     const clean = typeof icon === 'string' && icon && icon.length <= MAX_ICON_LENGTH ? icon : null;
     if (clean) roomIcons.set(room, clean); else roomIcons.delete(room);
+    markRoomDirty(room);
     io.emit('rooms-update', getRoomList());
     console.log(`[icone-sala] ${socket.id} atualizou o ícone da sala "${room}"`);
   });
@@ -498,6 +588,7 @@ io.on('connection', (socket) => {
     sendChannelsInfo(room);
     broadcastUserList(room);
     broadcastVoiceChannels(room);
+    markRoomDirty(room);
   });
 
   socket.on('send-message', ({ channel, text }) => {
@@ -520,6 +611,7 @@ io.on('connection', (socket) => {
     if (!list) return;
     list.push(msg);
     if (list.length > MAX_MESSAGES_PER_CHANNEL) list.shift();
+    markRoomDirty(room);
 
     io.to(room).emit('chat-message', { channel, message: msg });
   });
@@ -648,4 +740,9 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+// Recupera as salas salvas (se tiver Redis configurado) ANTES de aceitar
+// conexão -- sem isso, o primeiro socket a conectar sempre veria a lista de
+// salas ainda vazia mesmo se o banco já tivesse salas de verdade.
+loadRoomsFromRedis().then(() => {
+  server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+});

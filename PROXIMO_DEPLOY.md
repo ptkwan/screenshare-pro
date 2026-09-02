@@ -8,6 +8,34 @@ Status: `[ ]` pendente · `[~]` investigando · `[x]` corrigido (mas ainda não 
 
 ---
 
+## [~] 12. Persistência de verdade com Upstash Redis (código pronto, falta a conta)
+
+Pedido do Patrick depois do item 11: já que as salas "ficam de pé", que
+sobrevivam também a um restart do servidor de verdade (não só enquanto o
+processo ficar de pé). Ele escolheu Upstash Redis (mais parecido com o
+que já existe hoje -- o código já usa Maps/Sets na memória, então a
+migração é praticamente 1-pra-1).
+
+**Feito**: `server.js` agora tem uma camada de persistência opcional --
+com `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN` configurados
+(variáveis de ambiente no Render, nunca no código), cada sala é salva
+como um snapshot (canais, mensagens, senha, ícone, token de dono, nomes
+aprovados) e recuperada automaticamente quando o servidor sobe de novo.
+Sem essas variáveis, o app funciona exatamente como antes (só memória) --
+zero risco pra quem ainda não configurou nada.
+
+**Bloqueado no Patrick**: preciso que ele crie a conta grátis no
+upstash.com, crie um banco Redis, e me passe `UPSTASH_REDIS_REST_URL` e
+`UPSTASH_REDIS_REST_TOKEN` (da aba "REST API" do banco). Depois disso
+preciso configurar essas duas variáveis no painel do Render também.
+
+**Testado**: rodei a suíte de regressão completa com as variáveis
+ausentes (o caminho que já está em produção agora) -- tudo funciona igual
+a antes, sem nenhum erro. **Não testado ainda**: o vai-e-volta de verdade
+com o Redis (só dá pra testar depois de ter as credenciais).
+
+---
+
 ## [x] 11. Salas persistentes, painel de participantes removido, mic no card, ruído de teclado (CORRIGIDO, não deployado ainda)
 
 Lote de pedidos do Patrick:
