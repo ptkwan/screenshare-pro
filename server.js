@@ -58,6 +58,7 @@ function broadcastUserList(roomId) {
     return {
       id,
       name: s?.data.username || 'Anônimo',
+      avatar: s?.data.avatar || null,
       voiceChannel,
       isStreaming: voiceChannel ? (broadcasters.get(voiceChannel)?.has(id) || false) : false
     };
@@ -113,7 +114,7 @@ io.on('connection', (socket) => {
     socket.emit('rooms-list', getRoomList());
   });
 
-  socket.on('join-room', ({ roomId, username }) => {
+  socket.on('join-room', ({ roomId, username, avatar }) => {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Set());
     }
@@ -121,6 +122,7 @@ io.on('connection', (socket) => {
     rooms.get(roomId).add(socket.id);
     socket.join(roomId);
     socket.data.username = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
+    socket.data.avatar = typeof avatar === 'string' ? avatar : null;
     socket.data.room = roomId;
     socket.data.voiceChannel = null;
 
@@ -145,6 +147,13 @@ io.on('connection', (socket) => {
     if (!trimmed) return;
     socket.data.username = trimmed;
     if (room) broadcastUserList(room);
+  });
+
+  socket.on('update-avatar', ({ avatar }) => {
+    const room = socket.data.room;
+    if (!room) return;
+    socket.data.avatar = typeof avatar === 'string' && avatar ? avatar : null;
+    broadcastUserList(room);
   });
 
   socket.on('rename-room', ({ newName }) => {

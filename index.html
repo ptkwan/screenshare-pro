@@ -101,7 +101,7 @@
         .channel-item.active-channel { background: #3f3f46; color: #fff; }
         .channel-item .ch-icon { font-size: 16px; flex-shrink: 0; color: #71717a; }
         .channel-item.active-channel .ch-icon { color: #e4e4e7; }
-        .voice-member-row { display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 30px; font-size: 12px; color: #a1a1aa; }
+        .voice-member-row { display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 20px; font-size: 12px; color: #a1a1aa; }
 
         /* Chat de texto */
         .chat-message { display: flex; gap: 10px; }
@@ -112,6 +112,17 @@
         .chat-message .cm-text { font-size: 14px; color: #d4d4d8; white-space: pre-wrap; word-break: break-word; }
 
         .control-btn.disabled-btn { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+        /* Avatar: anel verde tipo Discord enquanto a pessoa está falando */
+        .avatar-badge { transition: box-shadow 0.1s ease-out; box-shadow: 0 0 0 0 transparent; }
+        .avatar-badge.speaking-ring { box-shadow: 0 0 0 3px #23a55a; }
+        .avatar-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+        .avatar-wrap.avatar-editable { cursor: pointer; }
+        .avatar-wrap.avatar-editable .avatar-edit-overlay {
+            position: absolute; inset: 0; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.15s ease; color: #fff; font-size: 11px;
+        }
+        .avatar-wrap.avatar-editable:hover .avatar-edit-overlay { opacity: 1; }
     </style>
 </head>
 <body class="flex flex-col">
@@ -335,14 +346,22 @@
         </form>
     </div>
 
+    <!-- INPUT OCULTO PARA TROCAR O AVATAR (clique no seu próprio avatar) -->
+    <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
 
             const socket = io('https://meu-servidor-webrtc-ifsp.onrender.com', {
                 autoConnect: true,
                 reconnection: true,
-                reconnectionAttempts: 5,
-                reconnectionDelay: 1000
+                // O servidor é hospedado no plano gratuito do Render, que hiberna
+                // depois de alguns minutos sem uso e pode levar até ~1 minuto pra
+                // "acordar" na próxima conexão. Precisa de bastante tentativa e
+                // bastante tempo total pra não desistir antes do servidor acordar.
+                reconnectionAttempts: 30,
+                reconnectionDelay: 2000,
+                reconnectionDelayMax: 5000
             });
 
             const videoGrid = document.getElementById('video-grid');
@@ -362,6 +381,7 @@
             inputUsername.value = localStorage.getItem('ssp-username') || '';
             const inputNewRoom = document.getElementById('input-new-room');
             inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
+            let myAvatar = localStorage.getItem('ssp-avatar') || null;
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
@@ -388,6 +408,132 @@
                 for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
                 return AVATAR_COLORS[hash % AVATAR_COLORS.length];
             }
+
+            // ==========================================
+            // AVATAR (foto de perfil com fallback pra iniciais coloridas,
+            // + anel verde de "falando" tipo Discord)
+            // ==========================================
+            function avatarHtml(user, sizeClass, editable) {
+                const textSize = sizeClass === 'w-6 h-6' ? 'text-[10px]' : 'text-xs';
+                const inner = user.avatar
+                    ? `<img src="${user.avatar}" data-avatar-for="${user.id}" class="${sizeClass} rounded-full object-cover avatar-badge" alt="">`
+                    : `<div data-avatar-for="${user.id}" class="${sizeClass} rounded-full ${user.id === socket.id ? 'bg-blue-600' : colorForUser(user.id)} flex items-center justify-center ${textSize} font-bold text-white avatar-badge">${(user.name || '?').charAt(0).toUpperCase()}</div>`;
+
+                if (!editable) return `<div class="avatar-wrap flex-shrink-0">${inner}</div>`;
+                return `
+                    <div class="avatar-wrap avatar-editable flex-shrink-0" onclick="window.startEditOwnAvatar(event)" title="Clique para trocar sua foto">
+                        ${inner}
+                        <div class="avatar-edit-overlay"><i class="ph ph-camera"></i></div>
+                    </div>
+                `;
+            }
+
+            // Reduz a imagem escolhida pra um quadrado pequeno (evita mandar fotos
+            // gigantes pelo socket — todo mundo na sala recebe essa string em toda
+            // atualização da lista de usuários).
+            const AVATAR_SIZE_PX = 128;
+            function resizeImageToDataUrl(file) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const side = Math.min(img.width, img.height);
+                        const sx = (img.width - side) / 2;
+                        const sy = (img.height - side) / 2;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = AVATAR_SIZE_PX;
+                        canvas.height = AVATAR_SIZE_PX;
+                        canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE_PX, AVATAR_SIZE_PX);
+                        URL.revokeObjectURL(img.src);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    };
+                    img.onerror = reject;
+                    img.src = URL.createObjectURL(file);
+                });
+            }
+
+            const avatarFileInput = document.getElementById('avatar-file-input');
+            window.startEditOwnAvatar = function (e) {
+                e.stopPropagation();
+                avatarFileInput.click();
+            };
+            avatarFileInput.addEventListener('change', async () => {
+                const file = avatarFileInput.files[0];
+                avatarFileInput.value = '';
+                if (!file) return;
+                try {
+                    myAvatar = await resizeImageToDataUrl(file);
+                    localStorage.setItem('ssp-avatar', myAvatar);
+                    socket.emit('update-avatar', { avatar: myAvatar });
+                    if (window._users) {
+                        const me = window._users.find(u => u.id === socket.id);
+                        if (me) me.avatar = myAvatar;
+                    }
+                    updateUserList();
+                    renderChannelSidebar();
+                    renderVoiceMemberStrip();
+                    showToast('Perfil', 'Foto de perfil atualizada.');
+                } catch (e) {
+                    showToast('Erro', 'Não foi possível usar essa imagem.', 'error');
+                }
+            });
+
+            // ---- Detecção de "falando" (anel verde no avatar, tipo Discord) ----
+            const speakingAnalysers = {}; // peerId -> { analyser, buf }
+            const speakingState = {}; // peerId -> { speaking, lastLoudAt }
+            const SPEAKING_RMS_THRESHOLD = 0.03;
+            const SPEAKING_HANGOVER_MS = 250;
+
+            function attachSpeakingAnalyser(peerId, ctx, sourceNode) {
+                // Se já existia (ex: conexão de voz renegociada sem sair do canal),
+                // troca pelo novo em vez de ignorar — senão o indicador de "falando"
+                // fica preso ouvindo uma fonte de áudio morta pra sempre.
+                if (speakingAnalysers[peerId]) {
+                    try { speakingAnalysers[peerId].analyser.disconnect(); } catch (e) { /* ignora */ }
+                }
+                const analyser = ctx.createAnalyser();
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.4;
+                sourceNode.connect(analyser);
+                speakingAnalysers[peerId] = { analyser, buf: new Uint8Array(analyser.frequencyBinCount) };
+            }
+
+            function detachSpeakingAnalyser(peerId) {
+                if (speakingAnalysers[peerId]) {
+                    try { speakingAnalysers[peerId].analyser.disconnect(); } catch (e) { /* ignora */ }
+                    delete speakingAnalysers[peerId];
+                }
+                delete speakingState[peerId];
+                setSpeakingClass(peerId, false);
+            }
+
+            function setSpeakingClass(peerId, isSpeaking) {
+                document.querySelectorAll(`[data-avatar-for="${peerId}"]`).forEach(el => {
+                    el.classList.toggle('speaking-ring', isSpeaking);
+                });
+            }
+
+            function speakingTick() {
+                const now = Date.now();
+                Object.keys(speakingAnalysers).forEach(peerId => {
+                    const { analyser, buf } = speakingAnalysers[peerId];
+                    analyser.getByteTimeDomainData(buf);
+                    let sumSquares = 0;
+                    for (let i = 0; i < buf.length; i++) {
+                        const v = (buf[i] - 128) / 128;
+                        sumSquares += v * v;
+                    }
+                    const rms = Math.sqrt(sumSquares / buf.length);
+                    const state = speakingState[peerId] || (speakingState[peerId] = { speaking: false, lastLoudAt: 0 });
+                    if (rms > SPEAKING_RMS_THRESHOLD) state.lastLoudAt = now;
+                    const shouldSpeak = (now - state.lastLoudAt) < SPEAKING_HANGOVER_MS;
+                    if (shouldSpeak !== state.speaking) {
+                        state.speaking = shouldSpeak;
+                        setSpeakingClass(peerId, shouldSpeak);
+                    }
+                });
+                requestAnimationFrame(speakingTick);
+            }
+            requestAnimationFrame(speakingTick);
 
             // ==========================================
             // QUALIDADE DE VÍDEO (MANUAL OU AUTOMÁTICA)
@@ -628,13 +774,25 @@
                 gain.gain.value = globallyMuted ? 0 : base * masterVolume;
             }
 
+            function ensureSelfSpeakingAnalyser() {
+                // O analyser some toda vez que closeAllVoicePeers() roda (troca de
+                // canal/sala), mas o micStream em si continua o mesmo — por isso
+                // isso não pode ficar só dentro do "if (micStream) return" abaixo.
+                if (!micStream || speakingAnalysers[socket.id]) return;
+                try {
+                    const ctx = getAudioCtx();
+                    attachSpeakingAnalyser(socket.id, ctx, ctx.createMediaStreamSource(micStream));
+                } catch (e) { /* sem indicador de "falando" pra si mesmo, sem problema */ }
+            }
+
             async function ensureMicStream() {
-                if (micStream) return micStream;
+                if (micStream) { ensureSelfSpeakingAnalyser(); return micStream; }
                 try {
                     micStream = await navigator.mediaDevices.getUserMedia({
                         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                     });
                     micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+                    ensureSelfSpeakingAnalyser();
                     return micStream;
                 } catch (err) {
                     console.error(err);
@@ -729,6 +887,7 @@
                     source.connect(gain).connect(ctx.destination);
                     gainNodes[peerId] = gain;
                     applyGainForUser(peerId);
+                    attachSpeakingAnalyser(peerId, ctx, source);
                 } catch (e) {
                     console.warn('Web Audio indisponível, tocando sem controle de volume por pessoa:', e);
                     audioEl.muted = isMuted || perUserMuted.has(peerId);
@@ -743,6 +902,7 @@
                     try { gainNodes[peerId].disconnect(); } catch (e) { /* ignora */ }
                     delete gainNodes[peerId];
                 }
+                detachSpeakingAnalyser(peerId);
             }
 
             function closeVoicePeer(peerId) {
@@ -764,11 +924,12 @@
                 Array.from(document.querySelectorAll('#voice-audio-container audio[data-voice-id]')).forEach(el => {
                     removeVoiceAudio(el.dataset.voiceId);
                 });
-                // Garantia extra: desconecta qualquer GainNode que tenha sobrado órfão
+                // Garantia extra: desconecta qualquer GainNode/analyser que tenha sobrado órfão
                 Object.keys(gainNodes).forEach(peerId => {
                     try { gainNodes[peerId].disconnect(); } catch (e) { /* ignora */ }
                     delete gainNodes[peerId];
                 });
+                Object.keys(speakingAnalysers).forEach(peerId => detachSpeakingAnalyser(peerId));
             }
 
             function updateMicIcon() {
@@ -1036,8 +1197,12 @@
                         const isSelf = m.id === socket.id;
                         const row = document.createElement('div');
                         row.className = 'voice-member-row';
-                        const micIcon = isSelf ? (isMicMuted ? 'ph-microphone-slash' : 'ph-microphone') : 'ph-user';
-                        row.innerHTML = `<i class="ph ${micIcon} text-[11px]"></i><span class="truncate">${m.name}${isSelf ? ' (Você)' : ''}</span>`;
+                        const micIcon = isSelf ? (isMicMuted ? 'ph-microphone-slash' : 'ph-microphone') : 'ph-microphone';
+                        row.innerHTML = `
+                            ${avatarHtml(m, 'w-6 h-6', isSelf)}
+                            <span class="truncate flex-1">${m.name}${isSelf ? ' (Você)' : ''}</span>
+                            <i class="ph ${micIcon} text-[11px] flex-shrink-0"></i>
+                        `;
                         voiceList.appendChild(row);
                     });
                 });
@@ -1094,7 +1259,6 @@
                     const isMe = u.id === socket.id;
                     const chip = document.createElement('div');
                     chip.className = 'flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-3 py-1';
-                    const initial = (u.name || '?').charAt(0).toUpperCase();
 
                     let watchBtn = '';
                     if (u.isStreaming && !isMe) {
@@ -1108,7 +1272,7 @@
                     }
 
                     chip.innerHTML = `
-                        <div class="w-6 h-6 rounded-full flex-shrink-0 ${colorForUser(u.id)} flex items-center justify-center text-[10px] font-bold text-white">${initial}</div>
+                        ${avatarHtml(u, 'w-6 h-6', isMe)}
                         <span class="text-xs text-zinc-300 truncate max-w-[100px]">${u.name}${isMe ? ' (Você)' : ''}</span>
                         ${watchBtn}
                     `;
@@ -1742,7 +1906,6 @@
 
                 users.forEach(u => {
                     const isMe = u.id === socket.id;
-                    const initial = (u.name || '?').charAt(0).toUpperCase();
 
                     const div = document.createElement('div');
                     div.className = 'flex items-center gap-3 p-2 rounded-lg border border-zinc-700/50 bg-zinc-800/40 participant-item';
@@ -1765,7 +1928,7 @@
                     }
 
                     div.innerHTML = `
-                        <div class="w-8 h-8 rounded-full flex-shrink-0 ${isMe ? 'bg-blue-600' : 'bg-zinc-600'} flex items-center justify-center text-xs font-bold text-white">${initial}</div>
+                        ${avatarHtml(u, 'w-8 h-8', isMe)}
                         <span class="text-sm text-zinc-300 truncate flex-1" id="${isMe ? 'own-name-label' : ''}">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
                         ${channelBadge}
                         ${actionHtml}
@@ -1907,7 +2070,7 @@
                 Object.keys(chatHistories).forEach(k => delete chatHistories[k]);
                 setControlsEnabled(false);
 
-                socket.emit('join-room', { roomId: currentRoom, username: myUsername });
+                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar });
             }
 
             btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
