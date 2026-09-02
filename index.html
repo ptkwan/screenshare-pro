@@ -392,6 +392,20 @@
                 reconnectionDelayMax: 5000
             });
 
+            // Manda erros/eventos importantes pro log do servidor (aparece no
+            // painel do Render) — sem isso, um bug do lado de quem usa o app
+            // só dava pra investigar abrindo o DevTools na hora, no PC da
+            // pessoa. Não trava nada se o socket ainda não conectou.
+            function reportLog(level, message) {
+                try { socket.emit('client-log', { level, message: String(message) }); } catch (e) { /* ignora */ }
+            }
+            window.addEventListener('error', (e) => {
+                reportLog('error', `${e.message} @ ${e.filename}:${e.lineno}`);
+            });
+            window.addEventListener('unhandledrejection', (e) => {
+                reportLog('error', `Promise rejeitada: ${e.reason}`);
+            });
+
             const videoGrid = document.getElementById('video-grid');
             const emptyState = document.getElementById('empty-state');
             const btnShare = document.getElementById('btn-share');
@@ -833,6 +847,7 @@
                     return micStream;
                 } catch (err) {
                     console.error(err);
+                    reportLog('error', `Falha ao acessar microfone: ${err.name || err}`);
                     showToast('Aviso', 'Não foi possível acessar o microfone para o chat de voz.', 'error');
                     return null;
                 }
@@ -1944,8 +1959,21 @@
                 showToast('Erro', 'Não foi possível conectar ao servidor.', 'error');
             });
 
-            socket.on('kicked', ({ by }) => {
+            socket.on('kicked', ({ by }, ack) => {
+                reportLog('info', `Recebi 'kicked' (por ${by || '?'}), confirmando e voltando pro lobby`);
                 returnToLobby('Expulso', by ? `Você foi expulso da sala por ${by}.` : 'Você foi expulso da sala.');
+                if (typeof ack === 'function') ack();
+            });
+
+            // Plano B: se por algum motivo o evento 'kicked' acima se perder
+            // (corrida com a desconexão), um "disconnect" que o SERVIDOR
+            // iniciou (não uma queda de rede) nunca reconecta sozinho -- sem
+            // isso, o app ficava travado mostrando a última tela de antes,
+            // sem nenhum jeito de voltar pro lobby.
+            socket.on('disconnect', (reason) => {
+                if (reason === 'io server disconnect' && currentRoom) {
+                    returnToLobby('Desconectado', 'Você foi desconectado da sala pelo servidor.');
+                }
             });
 
             socket.on('owner-token', ({ roomId, token }) => {
@@ -2379,6 +2407,7 @@
                     onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`, audioMode);
                 } catch (err) {
                     console.error(err);
+                    reportLog('error', `Falha ao capturar tela: ${err.name || err}`);
                     showToast('Erro', 'Falha ao capturar tela. Tente novamente.', 'error');
                     stopNativeAppAudio();
                 }

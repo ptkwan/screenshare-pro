@@ -127,6 +127,7 @@ io.on('connection', (socket) => {
 
     if (!isNewRoom && roomPasswords.has(roomId)) {
       if (hashPassword(password) !== roomPasswords.get(roomId)) {
+        console.log(`[join] ${socket.id} (${username}) errou a senha da sala "${roomId}"`);
         socket.emit('join-error', { reason: 'wrong-password' });
         return;
       }
@@ -169,6 +170,8 @@ io.on('connection', (socket) => {
 
     socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
     io.emit('rooms-update', getRoomList());
+
+    console.log(`[join] ${socket.id} (${socket.data.username}) entrou na sala "${roomId}"${isNewRoom ? ' (nova sala, virou dono)' : ''}`);
   });
 
   socket.on('rename-self', ({ newName }) => {
@@ -187,7 +190,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('rename-room', ({ newName }) => {
-    if (!socket.data.isOwner) return;
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou renomear a sala sem ser dono`);
+      return;
+    }
     const oldRoom = socket.data.room;
     const trimmed = cleanName(newName, MAX_NAME_LENGTH);
     if (!oldRoom || !trimmed || trimmed === oldRoom || rooms.has(trimmed)) return;
@@ -212,10 +218,14 @@ io.on('connection', (socket) => {
 
     io.to(trimmed).emit('room-renamed', { newName: trimmed });
     io.emit('rooms-update', getRoomList());
+    console.log(`[rename] ${socket.id} renomeou a sala "${oldRoom}" pra "${trimmed}"`);
   });
 
   socket.on('rename-channel', ({ type, oldName, newName }) => {
-    if (!socket.data.isOwner) return;
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou renomear um canal sem ser dono`);
+      return;
+    }
     const room = socket.data.room;
     const trimmed = cleanName(newName, MAX_NAME_LENGTH);
     if (!room || !trimmed) return;
@@ -333,16 +343,34 @@ io.on('connection', (socket) => {
   });
 
   socket.on('kick-user', ({ userId }) => {
-    if (!socket.data.isOwner) return;
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou expulsar sem ser dono`);
+      return;
+    }
     const room = socket.data.room;
     if (!room || !userId || userId === socket.id) return;
     if (!rooms.get(room)?.has(userId)) return;
 
     const targetSocket = io.sockets.sockets.get(userId);
     if (!targetSocket) return;
+    const targetName = targetSocket.data.username;
 
-    targetSocket.emit('kicked', { by: socket.data.username });
-    targetSocket.disconnect(true);
+    // Desconectar logo depois do emit é uma corrida: o pacote pode se perder
+    // na hora de fechar a conexão, e um "disconnect" iniciado pelo servidor
+    // NÃO reconecta sozinho -- o app de quem foi expulso ficava travado, sem
+    // aviso nenhum. Agora espera a confirmação (ack) do cliente antes de
+    // desconectar, com um tempo limite de garantia caso a confirmação não
+    // chegue (ex: versão antiga do app, sem esse suporte).
+    let disconnected = false;
+    const doDisconnect = (viaAck) => {
+      if (disconnected) return;
+      disconnected = true;
+      console.log(`[kick] ${targetName} (${userId}) desconectado ${viaAck ? 'com confirmação do cliente' : 'por tempo limite (sem confirmação)'}`);
+      if (targetSocket.connected) targetSocket.disconnect(true);
+    };
+    console.log(`[kick] ${socket.data.username} (${socket.id}) expulsou ${targetName} (${userId}) da sala "${room}"`);
+    targetSocket.emit('kicked', { by: socket.data.username }, () => doDisconnect(true));
+    setTimeout(() => doDisconnect(false), 1500);
   });
 
   socket.on('offer', ({ target, sdp, caller }) => {
@@ -357,8 +385,13 @@ io.on('connection', (socket) => {
     io.to(target).emit('ice-candidate', { sender: socket.id, candidate });
   });
 
-  socket.on('disconnect', () => {
+  socket.on('client-log', ({ level, message }) => {
+    console.log(`[client-log:${level || 'info'}] ${socket.data.username || socket.id}: ${String(message).slice(0, 500)}`);
+  });
+
+  socket.on('disconnect', (reason) => {
     const room = socket.data.room;
+    console.log(`[disconnect] ${socket.id} (${socket.data.username || '?'}) motivo: ${reason}`);
     if (room) {
       leaveCurrentVoiceChannel(socket);
 
