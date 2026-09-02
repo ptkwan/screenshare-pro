@@ -176,6 +176,19 @@ function sanitizeAvatar(raw) {
   return AVATAR_DATA_URL_RE.test(raw) ? raw : null;
 }
 
+// Mesma validação do avatar (mesmo regex, já fecha a injeção por conta
+// própria), mas com um teto bem maior -- imagem de chat (print de tela) é
+// legitimamente mais pesada que uma foto de perfil pequena. O cliente já
+// redimensiona/comprime antes de mandar; isso aqui é só o limite de
+// segurança pro servidor não aceitar payload absurdo de qualquer socket.
+const MAX_CHAT_IMAGE_LENGTH = 1_500_000; // ~1.1MB decodificado
+
+function sanitizeChatImage(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  if (raw.length > MAX_CHAT_IMAGE_LENGTH) return null;
+  return AVATAR_DATA_URL_RE.test(raw) ? raw : null;
+}
+
 function hashPassword(pw) {
   return crypto.createHash('sha256').update((pw || '').toString()).digest('hex');
 }
@@ -696,18 +709,22 @@ io.on('connection', (socket) => {
     markRoomDirty(room);
   });
 
-  socket.on('send-message', ({ channel, text }) => {
+  socket.on('send-message', ({ channel, text, image }) => {
     const room = socket.data.room;
     const channels = room ? roomChannels.get(room) : null;
     if (!room || !channels || !channels.text.includes(channel)) return;
     const trimmed = (text || '').toString().slice(0, 2000).trim();
-    if (!trimmed) return;
+    const cleanImage = sanitizeChatImage(image);
+    // Mensagem precisa ter texto OU imagem -- as duas vazias não vira nada
+    // (evita mensagem "fantasma" na lista, sem nada pra mostrar).
+    if (!trimmed && !cleanImage) return;
 
     const msg = {
       id: `${socket.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       userId: socket.id,
       userName: socket.data.username,
       text: trimmed,
+      image: cleanImage,
       ts: Date.now()
     };
 
