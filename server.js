@@ -210,20 +210,27 @@ function removeFromRoom(socket, room) {
   if (!rooms.has(room)) return;
   rooms.get(room).delete(socket.id);
   if (rooms.get(room).size === 0) {
-    rooms.delete(room);
-    roomChannels.delete(room);
-    roomVoiceMembers.delete(room);
-    roomBroadcasters.delete(room);
-    roomMessages.delete(room);
-    roomPasswords.delete(room);
-    roomOwnerTokens.delete(room);
-    roomIcons.delete(room);
-    roomPendingJoins.delete(room);
-    roomApprovedNames.delete(room);
-    Array.from(passwordAttempts.keys())
-      .filter(k => k.endsWith(`|${room}`))
-      .forEach(k => passwordAttempts.delete(k));
-    io.emit('rooms-update', getRoomList());
+    // A sala fica de pé mesmo vazia -- canais, mensagens, senha, ícone e
+    // token de dono continuam guardados (pedido explícito: "não tem como
+    // ficarem de pé pra sempre?"). Só não sobrevive a um restart do
+    // processo do servidor -- não tem banco de dados, é tudo em memória.
+    //
+    // Quem tava esperando aprovação entra direto agora: não tem mais
+    // ninguém pra aprovar, não faz sentido deixar preso pra sempre.
+    const pending = roomPendingJoins.get(room);
+    if (pending && pending.size > 0) {
+      const waitingIds = Array.from(pending.keys());
+      pending.clear();
+      waitingIds.forEach(id => {
+        const s = io.sockets.sockets.get(id);
+        if (!s) return;
+        if (!roomApprovedNames.has(room)) roomApprovedNames.set(room, new Set());
+        roomApprovedNames.get(room).add(s.data.username);
+        completeJoin(s, room);
+      });
+    } else {
+      io.emit('rooms-update', getRoomList());
+    }
   } else {
     broadcastUserList(room);
     broadcastVoiceChannels(room);
@@ -286,13 +293,16 @@ io.on('connection', (socket) => {
     const isOwnerByToken = !isNewRoom && !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
     const approvedSet = roomApprovedNames.get(roomId);
     const alreadyApproved = !!approvedSet && approvedSet.has(cleanUsername);
+    // Sala persistente (fica de pé mesmo vazia) sem ninguém dentro agora --
+    // não tem ninguém pra aprovar, então entra direto, igual uma sala nova.
+    const roomCurrentlyEmpty = isNewRoom || rooms.get(roomId)?.size === 0;
 
-    // Sistema de aprovação: quem entra numa sala já existente pela primeira
-    // vez (e não é o dono) fica pendente até o dono aprovar ou recusar pelo
-    // próprio app. Uma vez aprovado, o nome fica liberado enquanto o
-    // servidor não reiniciar (sem banco de dados ainda, não persiste além
-    // disso).
-    if (!isNewRoom && !isOwnerByToken && !alreadyApproved) {
+    // Sistema de aprovação: quem entra numa sala já existente e OCUPADA pela
+    // primeira vez (e não é o dono) fica pendente até o dono aprovar ou
+    // recusar pelo próprio app. Uma vez aprovado, o nome fica liberado
+    // enquanto o servidor não reiniciar (sem banco de dados ainda, não
+    // persiste além disso).
+    if (!roomCurrentlyEmpty && !isOwnerByToken && !alreadyApproved) {
       socket.data.username = cleanUsername;
       socket.data.avatar = cleanAvatar;
       socket.data.pendingRoom = roomId;

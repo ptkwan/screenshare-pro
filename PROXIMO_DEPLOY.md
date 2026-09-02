@@ -8,6 +8,57 @@ Status: `[ ]` pendente · `[~]` investigando · `[x]` corrigido (mas ainda não 
 
 ---
 
+## [x] 11. Salas persistentes, painel de participantes removido, mic no card, ruído de teclado (CORRIGIDO, não deployado ainda)
+
+Lote de pedidos do Patrick:
+
+- **Toques de voz mais altos + tocam pra mim também**: volume do "blip"
+  subiu (0.16 → 0.38 do volume geral), e agora toca também quando EU
+  mesmo entro/saio de um canal de voz (antes só tocava pra quem já
+  estava lá vendo outra pessoa entrar/sair).
+
+- **Salas "ficam de pé pra sempre"**: o servidor não apaga mais canais,
+  mensagens, senha, ícone e token de dono quando a sala fica vazia — só
+  isso não sobrevive a um **restart do processo do servidor** (sem banco
+  de dados, é tudo em memória; o ícone que sumiu era provavelmente por
+  isso). Corrigido junto: quem tentava entrar numa sala persistente
+  *vazia* ficava preso pra sempre na fila de aprovação (ninguém pra
+  aprovar) — agora entra direto, e quem já tava esperando quando a sala
+  esvaziou entra automaticamente.
+
+- **Ruído de teclado no microfone**: adicionadas as constraints extras do
+  Chromium (`googTypingNoiseDetection` e afins) no `getUserMedia`, que
+  miram exatamente esse tipo de ruído. Não é o mesmo nível do Krisp/
+  RNNoise (isso continua no item 7, não é trivial), mas é uma melhora real
+  e imediata sem precisar de nenhuma lib nova.
+
+- **Botão de mic no seu próprio card da sidebar**: clicar no ícone de
+  microfone ao lado do seu nome (embaixo, na barra de canais) muta/ativa
+  direto, igual o Discord — antes só dava pra mutar pelo botão do rodapé.
+
+- **Painel de participantes (direita) removido**: era repetitivo com a
+  lista de quem já aparece dentro de cada canal de voz na sidebar
+  esquerda. O botão de renomear o próprio nome, que só existia ali, foi
+  pro card da sidebar junto com o mic. Kick/volume por pessoa continuam
+  disponíveis pelo clique direito nas linhas da sidebar (já existia,
+  independente do painel removido).
+  **Trade-off avisado**: quem está na sala só no chat de texto (sem
+  entrar em nenhum canal de voz) não aparece em lugar nenhum da interface
+  agora — antes aparecia nesse painel.
+
+- **"AO VIVO" na sidebar em vez de só no topo do painel de voz**: quem
+  está compartilhando tela agora mostra um selo AO VIVO/ASSISTINDO direto
+  na lista de membros do canal de voz na sidebar esquerda, e é por ali que
+  dá pra entrar na stream da pessoa (clicando no selo ou na linha).
+
+**Testado** com dois clientes: renomear pelo card, mutar pelo card, sala
+continuando na lista depois de esvaziar, segunda pessoa entrando direto
+numa sala vazia sem aprovação, selo AO VIVO aparecendo e funcionando na
+sidebar, e os toques de entrada/saída (inclusive pra mim mesmo). Suite de
+regressão completa rodada de novo, sem erros de console.
+
+---
+
 ## [x] 10. Toques de entrar/sair da chamada de voz (CORRIGIDO, não deployado ainda)
 
 Pedido do Patrick: som quando alguém entra e outro quando sai da chamada,

@@ -105,8 +105,6 @@
         }
         .btn-assistindo:hover { background-color: #dc2626; }
         .btn-assistindo:hover .btn-assistindo-label::before { content: "PARAR"; }
-        .participant-item { transition: background 0.2s; }
-        .participant-item.streaming { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
         .quality-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid #3f3f46; background: #18181b; cursor: pointer; transition: all 0.15s ease; }
         .quality-option:hover { border-color: #52525b; }
@@ -332,12 +330,15 @@
                 <button id="btn-leave-voice-channel" class="text-zinc-400 hover:text-red-400 flex-shrink-0" title="Sair da sala de voz"><i class="ph ph-phone-disconnect"></i></button>
             </div>
             <!-- BLOCO FIXO DO USUÁRIO: sempre visível, não só durante uma call -->
-            <div class="flex-shrink-0 border-t border-zinc-800 px-2.5 py-2.5 flex items-center gap-2.5 bg-black/20">
+            <div class="flex-shrink-0 border-t border-zinc-800 px-2.5 py-2.5 flex items-center gap-1.5 bg-black/20">
                 <div id="own-user-avatar-wrap" class="flex-shrink-0"></div>
                 <span id="own-user-name" class="flex-1 min-w-0 text-sm text-zinc-200 truncate">Você</span>
-                <div id="own-user-mic-icon" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 flex-shrink-0" title="Estado do seu microfone">
+                <button id="btn-own-name-edit" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 flex-shrink-0" title="Mudar meu nome" onclick="window.startEditOwnName(event)">
+                    <i class="ph ph-pencil-simple text-xs"></i>
+                </button>
+                <button id="own-user-mic-icon" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-800 flex-shrink-0" title="Mutar/ativar seu microfone">
                     <i class="ph ph-microphone text-sm"></i>
-                </div>
+                </button>
             </div>
         </aside>
 
@@ -360,13 +361,6 @@
             </div>
         </div>
 
-        <aside id="participants-sidebar" class="w-72 h-full bg-zinc-900/50 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 hidden md:flex m-4 md:m-6">
-            <div class="h-14 border-b border-zinc-800 flex items-center justify-between px-4">
-                <h3 class="font-semibold text-sm text-zinc-200">Participantes (<span id="user-count">0</span>)</h3>
-                <i class="ph ph-users text-zinc-400 text-lg"></i>
-            </div>
-            <div id="users-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2"></div>
-        </aside>
     </main>
 
     <!-- FOOTER: prioridade visual -- mic/tela/sair (principais, maiores) vs utilitários (secundários, menores) -->
@@ -400,10 +394,6 @@
 
             <button class="control-btn text-zinc-400" id="btn-toggle-channels" title="Mostrar/ocultar lista de canais" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
                 <i class="ph ph-list text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-toggle-participants" title="Ocultar/Mostrar lista de participantes" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
-                <i class="ph ph-sidebar-simple text-base"></i>
             </button>
 
             <button class="control-btn text-zinc-400" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
@@ -481,8 +471,6 @@
             const volumeSlider = document.getElementById('volume-slider');
             const screenModal = document.getElementById('screen-modal');
             const sourcesList = document.getElementById('sources-list');
-            const usersListEl = document.getElementById('users-list');
-            const userCountEl = document.getElementById('user-count');
             const statusDot = document.getElementById('status-dot');
             const statusText = document.getElementById('status-text');
             const discoveryStatus = document.getElementById('discovery-status');
@@ -589,7 +577,7 @@
                         const me = window._users.find(u => u.id === socket.id);
                         if (me) me.avatar = myAvatar;
                     }
-                    updateUserList();
+                    updateOwnUserBlock();
                     renderChannelSidebar();
                     renderVoiceMemberStrip();
                     showToast('Perfil', 'Foto de perfil atualizada.');
@@ -716,7 +704,6 @@
             // CHAT DE VOZ (MALHA DE ÁUDIO ENTRE TODOS DA SALA)
             // ==========================================
             const voicePeers = {}; // peerId -> RTCPeerConnection (mic bidirecional)
-            const perUserMuted = new Set(); // peerIds que eu silenciei manualmente
             const userVolumes = {}; // peerId -> multiplicador de volume (1.0 = 100%, ate 2.0 = 200%)
             const gainNodes = {}; // peerId -> GainNode (permite passar de 100%, o <audio> sozinho nao consegue)
             let micStream = null;
@@ -942,7 +929,7 @@
                 const gain = gainNodes[peerId];
                 if (!gain) return;
                 const base = userVolumes[peerId] ?? 1.0;
-                const globallyMuted = isMuted || perUserMuted.has(peerId);
+                const globallyMuted = isMuted;
                 gain.gain.value = globallyMuted ? 0 : base * masterVolume;
             }
 
@@ -961,7 +948,14 @@
                 if (micStream) { ensureSelfSpeakingAnalyser(); return micStream; }
                 try {
                     micStream = await navigator.mediaDevices.getUserMedia({
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                        audio: {
+                            echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+                            // Constraints extras do Chromium (ignoradas silenciosamente se a
+                            // versão não suportar) -- googTypingNoiseDetection mira
+                            // especificamente o barulho de teclado, que é a queixa mais comum.
+                            googEchoCancellation: true, googNoiseSuppression: true,
+                            googHighpassFilter: true, googTypingNoiseDetection: true,
+                        }
                     });
                     micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
                     ensureSelfSpeakingAnalyser();
@@ -1072,7 +1066,7 @@
                     attachSpeakingAnalyser(peerId, ctx, source);
                 } catch (e) {
                     console.warn('Web Audio indisponível, tocando sem controle de volume por pessoa:', e);
-                    audioEl.muted = isMuted || perUserMuted.has(peerId);
+                    audioEl.muted = isMuted;
                     audioEl.volume = masterVolume;
                 }
             }
@@ -1144,21 +1138,20 @@
                 avatarWrap.innerHTML = avatarHtml({ id: socket.id || 'me', name, avatar: myAvatar }, 'w-8 h-8', false);
             }
 
-            document.getElementById('btn-mic').addEventListener('click', async () => {
+            async function toggleMic() {
                 isMicMuted = !isMicMuted;
                 if (!micStream && !isMicMuted) await ensureMicStream();
                 if (micStream) micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
                 updateMicIcon();
                 showToast('Microfone', isMicMuted ? 'Seu microfone foi silenciado.' : 'Seu microfone foi ativado.');
+            }
+            document.getElementById('btn-mic').addEventListener('click', toggleMic);
+            // Igual o Discord: o mic no seu próprio card na sidebar também muta/ativa
+            // -- mais intuitivo que só ter o botão lá embaixo no rodapé.
+            document.getElementById('own-user-mic-icon').addEventListener('click', () => {
+                if (!document.getElementById('btn-mic').classList.contains('disabled-btn')) toggleMic();
             });
 
-            function toggleUserMute(peerId) {
-                if (perUserMuted.has(peerId)) perUserMuted.delete(peerId);
-                else perUserMuted.add(peerId);
-                applyAudioToAllTiles();
-                updateUserList();
-            }
-            window.toggleUserMute = toggleUserMute;
 
             // ==========================================
             // VOLUME POR USUÁRIO (CLIQUE COM O BOTÃO DIREITO, 0-200%)
@@ -1336,7 +1329,7 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freqFrom, ctx.currentTime);
                     osc.frequency.exponentialRampToValueAtTime(freqTo, ctx.currentTime + duration);
-                    const peak = 0.16 * masterVolume;
+                    const peak = 0.38 * masterVolume;
                     gain.gain.setValueAtTime(0.0001, ctx.currentTime);
                     gain.gain.linearRampToValueAtTime(peak, ctx.currentTime + 0.012);
                     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
@@ -1377,6 +1370,7 @@
                 viewingType = 'voice';
                 viewingChannel = channel;
                 connectingMic = true;
+                playJoinTone(); // toque também pra mim mesmo, na hora que eu entro
                 // Marca quem já tava na sala como "conhecido" -- senão a primeira
                 // atualização depois de entrar tocaria um som de entrada pra cada
                 // pessoa que já estava lá antes de mim.
@@ -1412,6 +1406,7 @@
 
             function leaveVoiceChannel() {
                 if (!myVoiceChannel) return;
+                playLeaveTone(); // toque também pra mim mesmo, na hora que eu saio
                 if (isSharing) stopScreenShare();
 
                 closeAllVoicePeers();
@@ -1481,14 +1476,31 @@
                         const row = document.createElement('div');
                         row.className = 'voice-member-row';
                         const micIcon = isSelf ? (isMicMuted ? 'ph-microphone-slash' : 'ph-microphone') : 'ph-microphone';
+
+                        // Quem tá transmitindo tela mostra um selo "AO VIVO"/"ASSISTINDO"
+                        // bem aqui -- é por aqui que dá pra entrar na stream de alguém,
+                        // sem precisar de um painel de participantes separado só pra isso.
+                        let liveHtml = '';
+                        if (m.isStreaming && !isSelf) {
+                            const watching = selectedStreamers.has(m.id);
+                            liveHtml = watching
+                                ? `<button class="btn-assistindo" onclick="event.stopPropagation(); window.toggleWatch('${m.id}')" title="Clique para parar de assistir"><i class="ph-fill ph-eye text-xs"></i></button>`
+                                : `<button class="btn-assistir" onclick="event.stopPropagation(); window.toggleWatch('${m.id}')" title="Clique para assistir"><i class="ph-fill ph-play-circle text-xs"></i></button>`;
+                        } else if (m.isStreaming && isSelf) {
+                            liveHtml = '<span class="text-red-500 text-[9px] font-bold flex-shrink-0" style="animation: pulse-ring 1.5s infinite;">SUA TELA</span>';
+                        }
+
                         row.innerHTML = `
                             ${avatarHtml(m, 'w-6 h-6', isSelf)}
                             <span class="truncate flex-1">${escapeHtml(m.name)}${isSelf ? ' (Você)' : ''}</span>
+                            ${liveHtml}
                             <i class="ph ${micIcon} text-[11px] flex-shrink-0"></i>
                         `;
                         if (!isSelf) {
                             row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
                             attachVolumeContextMenu(row, m.id, m.name);
+                            if (m.isStreaming) row.style.cursor = 'pointer';
+                            if (m.isStreaming) row.addEventListener('click', () => window.toggleWatch(m.id));
                         }
                         voiceList.appendChild(row);
                     });
@@ -1828,36 +1840,6 @@
             btnFullscreen.addEventListener('click', toggleFullscreen);
 
             // ==========================================
-            // OCULTAR/MOSTRAR PAINEL DE PARTICIPANTES
-            // ==========================================
-            const participantsSidebar = document.getElementById('participants-sidebar');
-            // forceAtAnyWidth=true (clique explícito no botão) usa style.display
-            // direto, que vence a classe "md:flex" (só funciona >=768px) e garante
-            // que reabrir sempre funciona, em qualquer largura de janela. Sem
-            // isso, "reabrir" numa janela estreita não tinha efeito nenhum.
-            function applyParticipantsVisibility(hidden, forceAtAnyWidth) {
-                if (hidden) {
-                    participantsSidebar.style.display = 'none';
-                } else if (forceAtAnyWidth) {
-                    participantsSidebar.style.display = 'flex';
-                } else {
-                    participantsSidebar.style.display = ''; // deixa o breakpoint padrão (hidden md:flex) decidir
-                }
-            }
-            let participantsHidden = localStorage.getItem('ssp-hide-participants') === '1';
-            applyParticipantsVisibility(participantsHidden, false);
-
-            document.getElementById('btn-toggle-participants').addEventListener('click', () => {
-                // Decide pelo que tá REALMENTE visível na tela agora (não só pela
-                // preferência salva) -- numa janela estreita, o painel pode estar
-                // invisível por causa da largura mesmo com participantsHidden=false,
-                // e o clique precisa "abrir" nesse caso, não "fechar" de novo.
-                const isVisibleNow = participantsSidebar.offsetParent !== null;
-                participantsHidden = isVisibleNow;
-                localStorage.setItem('ssp-hide-participants', participantsHidden ? '1' : '0');
-                applyParticipantsVisibility(participantsHidden, true);
-            });
-
             // A sidebar de canais some sozinha abaixo de 768px (classes
             // "hidden md:flex") e antes disso não tinha NENHUM jeito de reabrir --
             // ficava impossível trocar de canal com a janela pequena. Esse botão
@@ -2267,7 +2249,8 @@
                 selectedStreamers.add(userId);
                 getOrCreateTile(userId);
                 socket.emit('request-stream', { userId });
-                updateUserList();
+                renderChannelSidebar();
+                if (viewingType === 'voice') renderVoiceMemberStrip();
                 showToast('Aguardando', `Carregando tela de ${getUserName(userId)}...`, 'info');
             }
 
@@ -2279,7 +2262,8 @@
                     delete viewerPeers[userId];
                 }
                 removeTile(userId);
-                updateUserList();
+                renderChannelSidebar();
+                if (viewingType === 'voice') renderVoiceMemberStrip();
             }
 
             function toggleWatch(userId) {
@@ -2466,54 +2450,9 @@
                     });
                 }
 
-                updateUserList();
                 renderChannelSidebar();
                 if (viewingType === 'voice') renderVoiceMemberStrip();
             });
-
-            function updateUserList() {
-                const users = window._users || [];
-                userCountEl.textContent = users.length;
-                usersListEl.innerHTML = '';
-
-                users.forEach(u => {
-                    const isMe = u.id === socket.id;
-
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-3 p-2 rounded-lg border border-zinc-700/50 bg-zinc-800/40 participant-item';
-
-                    let channelBadge = '';
-                    if (u.voiceChannel) {
-                        channelBadge = `<span class="text-[10px] text-emerald-400 flex items-center gap-1 flex-shrink-0"><i class="ph ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}</span>`;
-                    }
-
-                    let actionHtml = '';
-                    if (isMe) {
-                        actionHtml = `<button class="text-zinc-500 hover:text-white flex-shrink-0" onclick="window.startEditOwnName(event)" title="Mudar meu nome">
-                                          <i class="ph ph-pencil-simple text-sm"></i>
-                                       </button>`;
-                    } else {
-                        const muted = perUserMuted.has(u.id);
-                        actionHtml = `<button class="text-zinc-400 hover:text-white flex-shrink-0" onclick="window.toggleUserMute('${u.id}')" title="${muted ? 'Reativar áudio deste participante' : 'Silenciar este participante'}">
-                                        <i class="ph ${muted ? 'ph-speaker-simple-slash' : 'ph-speaker-simple-high'} text-sm"></i>
-                                     </button>`;
-                    }
-
-                    div.innerHTML = `
-                        ${avatarHtml(u, 'w-8 h-8', isMe)}
-                        <span class="text-sm text-zinc-300 truncate flex-1" id="${isMe ? 'own-name-label' : ''}">${escapeHtml(u.name)} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
-                        ${channelBadge}
-                        ${actionHtml}
-                    `;
-
-                    if (!isMe) {
-                        div.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                        attachVolumeContextMenu(div, u.id, u.name);
-                    }
-
-                    usersListEl.appendChild(div);
-                });
-            }
 
             // Confirma a entrada de verdade na sala (chega via 'channels-info', que só
             // é emitido pelo servidor depois que o join foi aceito -- direto, ou depois
@@ -2615,7 +2554,6 @@
                     delete senderPeers[userId];
                 }
                 closeVoicePeer(userId);
-                perUserMuted.delete(userId);
                 if (selectedStreamers.has(userId)) unwatchStreamer(userId);
             });
 
@@ -2644,7 +2582,6 @@
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
                 closeAllVoicePeers();
-                perUserMuted.clear();
                 selectedStreamers.clear();
                 videoGrid.innerHTML = '';
                 updateGridLayout();
