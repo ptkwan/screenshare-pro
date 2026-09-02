@@ -231,6 +231,29 @@ você. Depois de ter usuário/senha (ou API key), me manda que eu coloco no
 
 ---
 
+## [x] 2c. Faltava log de ICE pro chat de voz (CORRIGIDO, não deployado ainda)
+
+Relato do Patrick: um amigo compartilhando tela — dá pra ver a tela e ouvir
+o áudio do jogo dele, mas a voz do microfone dele não chega. Sintoma
+compatível com o mesmo problema do item 2 (sem TURN, a conexão falha
+especificamente quando essa pessoa é quem transmite) — só que dessa vez na
+conexão de VOZ, não na de tela.
+
+**Problema**: não dava pra confirmar, porque o log de estado ICE (o mesmo
+que foi usado pra diagnosticar o binonha) só existia pro compartilhamento
+de tela -- o chat de voz nunca teve esse log.
+
+**Corrigido**: `createVoicePeer()` agora loga o estado ICE
+(`ICE (voz com X): connected/checking/failed/...`) igual já acontecia pro
+compartilhamento de tela. Testado com dois clientes -- aparece certinho no
+log do servidor.
+
+Com isso, da próxima vez que alguém reportar "não consigo ouvir a voz de
+fulano", dá pra abrir o painel do Render e confirmar se é ICE falhando
+(aponta pra falta de TURN, item 2) ou outra coisa.
+
+---
+
 ## [~] 2b. Conexão do Boa cai e reconecta em loop (`transport error`/`transport close`)
 
 Log mostra o socket do Boa desconectando e reconectando repetidamente

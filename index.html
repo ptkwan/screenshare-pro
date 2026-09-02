@@ -1000,6 +1000,15 @@
 
                 pc.ontrack = (e) => attachVoiceAudio(peerId, e.streams[0]);
 
+                // Mesmo log de estado ICE que já existe pro compartilhamento de tela
+                // (foi assim que o problema do binonha foi diagnosticado) -- faltava
+                // pro chat de voz, então não dava pra confirmar se um "fulano não
+                // consegue falar" é o mesmo problema de rede (sem servidor TURN) ou
+                // outra coisa.
+                pc.oniceconnectionstatechange = () => {
+                    reportLog('info', `ICE (voz com ${getUserName(peerId)}): ${pc.iceConnectionState}`);
+                };
+
                 return pc;
             }
 
