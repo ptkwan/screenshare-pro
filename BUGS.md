@@ -6,6 +6,104 @@ sessão.
 
 ---
 
+## 2026-09-02
+
+### Tela de conexão travava o pedido de lista de salas (referência a botão removido)
+- **Sintoma**: ao remover a tela de "entrada rápida" (parte da mudança pra
+  sempre mostrar a lista de salas), o app parava de pedir a lista de salas
+  ativas ao conectar -- a lista só aparecia depois de algum evento
+  incidental (entrar/sair de sala em outro cliente), nunca no primeiro
+  carregamento.
+- **Causa**: sobrou uma linha (`document.getElementById('btn-quick-join').disabled
+  = false`) referenciando um botão que eu tinha acabado de apagar do HTML
+  como parte da mesma mudança. `getElementById` de um id inexistente
+  retorna `null`, e `null.disabled = false` lança uma exceção -- que
+  interrompia o resto do handler `socket.on('connect', ...)`, incluindo o
+  `socket.emit('get-rooms')` logo depois.
+- **Correção**: removida a linha órfã.
+- **Como foi encontrado**: teste automatizado com dois clientes reais --
+  o segundo cliente nunca via nenhuma sala na lista ao conectar, mesmo
+  com salas ativas.
+
+### Botão de ocultar/mostrar participantes não reabria em janela estreita
+- **Sintoma**: achado durante o teste do redesign, mas é um bug pré-existente
+  (não introduzido pelo redesign): abaixo de 768px de largura, o painel de
+  participantes some sozinho (classes `hidden md:flex`). Clicar no botão de
+  toggle pra reabrir não tinha efeito nenhum nessa largura.
+- **Causa**: o botão só alternava as classes `hidden`/`md:flex`, e `md:flex`
+  simplesmente não se aplica abaixo de 768px — não tinha nenhum jeito de
+  forçar visível numa janela estreita.
+- **Correção**: o toggle agora decide pelo que está *realmente* visível na
+  tela (`offsetParent !== null`) em vez de só uma preferência salva, e força
+  a visibilidade via `style.display` direto (que vence a regra responsiva)
+  quando o clique é explícito. Mesmo tratamento dado ao novo toggle da
+  sidebar de canais.
+- **Validado** com teste automatizado em 700px: escondido por padrão, primeiro
+  clique mostra, segundo esconde — e confirmado que o comportamento em
+  largura padrão (1280px) continua correto nos dois sentidos.
+
+### Não existia jeito de sair de uma sala / trocar de servidor sem fechar o app
+- **Sintoma**: reportado pelo Patrick com print — depois de entrar numa sala
+  (nesse caso uma sala com nome quebrado, "[object Object]" — ver bug
+  seguinte), não tinha nenhum botão ou ação pra voltar ao seletor de salas.
+  Único jeito era fechar o app inteiro e abrir de novo.
+- **Causa**: o botão "Trocar de sala" só existe na tela de login
+  (`#connection-modal`), antes de entrar numa sala. O servidor também nunca
+  teve um evento pra "sair da sala sem desconectar" — só existia limpeza
+  automática no `disconnect` (queda de conexão de verdade).
+- **Correção**: novo botão "Sair da sala" (`#btn-leave-room`) do lado do
+  nome da sala na sidebar, visível pra qualquer participante (não só o
+  dono). Emite um novo evento `leave-room` que o servidor trata sem
+  desconectar o socket — extraído num helper `removeFromRoom()`
+  compartilhado com o `disconnect` (mesma limpeza, sem duplicar código).
+  Depois de sair, o cliente volta pro seletor de salas e pode entrar em
+  outra sala normalmente na mesma sessão do app.
+- **Validado** com teste automatizado: A cria sala X, B entra em X (via fila
+  de aprovação), B clica em "Sair da sala", A vê a contagem de participantes
+  cair corretamente, e B consegue entrar numa sala Y diferente sem fechar o
+  app.
+
+### Nome de sala virava "[object Object]" e ficava permanente
+- **Sintoma**: o Patrick ficou preso numa sala literalmente chamada
+  "[object Object]" (confirmado inspecionando o `localStorage` real do app
+  — `ssp-last-room` tinha esse valor salvo).
+- **Causa**: `roomId` nunca passava por nenhuma limpeza/validação no
+  servidor (`join-room`) — qualquer string virava o nome literal e
+  permanente da sala (a Map key), incluindo texto colado/digitado por
+  engano. Combinado com o bug anterior (sem jeito de sair), quem caísse
+  numa sala com nome ruim ficava preso lá.
+- **Correção**: `roomId` agora passa por `cleanName()` (mesma limpeza já
+  usada pro nome de usuário) antes de qualquer coisa em `join-room`, e um
+  nome vazio depois de limpo rejeita a entrada (`join-error` com motivo
+  `invalid-room-name`) em vez de criar uma sala sem nome. Não impede
+  alguém de digitar um nome esquisito de propósito (não dá pra saber a
+  intenção), mas combinado com o botão de sair, deixa de ser uma
+  armadilha sem saída.
+- **Validado** com teste automatizado: nome de sala em branco não entra em
+  lugar nenhum, permanece no seletor.
+
+### CSP bloqueava silenciosamente o AudioWorklet (quebrava a captura de áudio nativa por app desde a v1.8.0)
+- **Sintoma**: ao testar a captura de áudio nativa (tanto a versão nova de
+  "Tela Cheia" quanto a versão por app que já estava em produção),
+  `nativeAudioCtx.audioWorklet.addModule(blobUrl)` rejeitava com
+  `DOMException: The user aborted a request` — mensagem genérica que não
+  aponta pra causa real.
+- **Causa**: o Content-Security-Policy adicionado na v1.8.0 (`script-src
+  'self' 'unsafe-inline'`, sem `blob:`, e sem `worker-src` nenhum) bloqueia
+  o carregamento do módulo do AudioWorklet a partir de uma `blob:` URL — e
+  o Chromium reporta esse bloqueio como um erro genérico de "abort" em vez
+  de um erro de CSP explícito, o que escondeu a causa real. Como esse
+  código é compartilhado entre a captura por app (já em produção desde a
+  v1.5.0) e a nova captura de tela cheia, **a captura de áudio por app
+  provavelmente já estava quebrada silenciosamente desde a v1.8.0** sem
+  ninguém perceber (o fallback pro modo antigo escondia o problema).
+- **Correção**: `script-src` ganhou `blob:` e foi adicionado `worker-src
+  'self' blob:` no CSP (`index.html`).
+- **Como foi encontrado**: testando a nova captura de tela cheia com
+  Playwright pilotando duas instâncias reais do Electron (dono + convidado)
+  contra um servidor local — sem isso, o erro genérico de "abort" seria
+  fácil de atribuir à lib nativa em vez do CSP.
+
 ## 2026-09-01
 
 ### Script `.ps1` de resolução de PID quebrava só no build empacotado (não em dev)

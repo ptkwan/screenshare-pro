@@ -112,3 +112,27 @@ function stopAppAudioCaptureInternal() {
 ipcMain.on('stop-app-audio-capture', () => {
     stopAppAudioCaptureInternal();
 });
+
+// Captura de áudio do sistema inteiro (WASAPI loopback clássico, sem PID) —
+// usada quando a fonte compartilhada é "Tela Cheia" e não uma janela
+// específica, então não tem um processo único pra filtrar. É o mesmo
+// caminho nativo que resolve a instabilidade da API antiga do Chromium
+// (chromeMediaSource: 'desktop' pra áudio), só que sem filtro de processo.
+ipcMain.handle('start-system-audio-capture', () => {
+    if (process.platform !== 'win32') return false;
+    try {
+        stopAppAudioCaptureInternal();
+        const loopback = require('loopback-capture');
+        activeCapture = new loopback.LoopbackCapture();
+        activeCapture.startSystemAudio((chunk) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('app-audio-chunk', chunk);
+            }
+        });
+        return true;
+    } catch (e) {
+        console.error('Falha ao iniciar captura de áudio do sistema:', e);
+        activeCapture = null;
+        return false;
+    }
+});

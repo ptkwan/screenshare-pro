@@ -8,7 +8,134 @@ Status: `[ ]` pendente · `[~]` investigando · `[x]` corrigido (mas ainda não 
 
 ---
 
-## [ ] 1. Compartilhar "Tela Cheia" com áudio do sistema não funciona
+## [x] 9. Trocar de servidor tipo Discord + ícones de sala (CORRIGIDO, não deployado ainda)
+
+Pedido do Patrick com prints comparando com o Discord. Três coisas juntas:
+
+- **Barra de servidores conhecidos** (nova coluna estreita à esquerda,
+  antes da lista de canais): mostra ícones das salas que você já entrou
+  (lembradas localmente, até 8), com a atual destacada (barrinha branca,
+  igual Discord). Clicar troca de sala sem fechar o app -- sai da atual e
+  entra na escolhida. Botão "+" no fim da barra abre o seletor de salas
+  pra entrar em outra ou criar uma nova, mesmo já estando conectado.
+- **Ícone de sala**: o dono pode trocar (botão novo do lado de
+  renomear/sair), aparece na barra de servidores e na lista de salas
+  ativas. Sem ícone, mostra a inicial do nome (mesmo padrão do avatar).
+- **Tela inicial sempre mostra a lista de salas** em vez de pular direto
+  pra última sala usada -- pedido explícito do Patrick, pra sempre dar
+  pra escolher outro servidor. A "entrada rápida" antiga foi removida (a
+  barra de servidores resolve esse caso de uso melhor).
+- Sala com senha continua pedindo a senha normalmente nesse fluxo todo
+  (reaproveita o modal que já existia).
+
+**Importante, avisado ao Patrick:** isso é troca rápida (sai de uma,
+entra na outra), não ficar conectado em várias ao mesmo tempo como o
+Discord de verdade faz -- isso exigiria manter várias conexões de
+voz/WebRTC em paralelo, mudança bem maior que não foi pedida.
+
+**Não implementado (avaliado e descartado por impossibilidade técnica):**
+compartilhar uma aba específica do navegador (tipo o seletor do Google
+Meet). Isso só funciona quando o app QUE PEDE a captura é o próprio
+navegador -- um app externo como o Roshan não tem acesso às abas de
+dentro do Chrome/Edge, só a janelas inteiras (isso o navegador já expõe
+via `desktopCapturer`). Compartilhar a janela do navegador (em vez de
+"Tela Cheia") já usa a captura nativa por processo, sem eco -- resolve a
+maior parte do caso de uso na prática.
+
+**Testado** com dois clientes reais: criar sala, trocar ícone, criar
+segunda sala com senha pelo botão "+", voltar pra primeira clicando no
+ícone dela na barra, confirmar que o ícone customizado aparece
+corretamente, confirmar que a tela inicial sempre mostra a lista (sem
+pular direto pra sala salva), e que sala com senha ainda pede senha
+corretamente nesse fluxo. No caminho, achado e corrigido um bug real que
+travava o pedido da lista de salas -- ver `BUGS.md`.
+
+---
+
+## [x] 8. Redesign de UX/UI (CORRIGIDO, não deployado ainda)
+
+Redesign completo da interface, feito em 3 fases com aprovação do Patrick em
+cada uma (diagnóstico → prévia visual → implementação). Sem mudar nenhuma
+lógica de WebSocket/WebRTC/áudio/screen share — só estrutura, hierarquia e
+estilo.
+
+**O que mudou:**
+- Header único: nome do app + contexto do canal atual juntos numa barra só
+  (antes eram duas barras separadas). Relógio removido.
+- Canal de voz conectado fica visualmente óbvio: verde + selo "AO VIVO" no
+  header, diferente do canal de texto (neutro, ícone de #).
+- Bloco fixo de usuário (nome + avatar + estado do mic) sempre visível no
+  rodapé da sidebar esquerda, não só durante uma call.
+- Rodapé com prioridade visual clara: mic/compartilhar tela/sair maiores e
+  em destaque; qualidade/tela cheia/toggles/saída de áudio menores e
+  discretos; slider de volume mais compacto.
+- Entrar num canal de voz agora dá feedback imediato — troca a tela na hora
+  e mostra "Conectando microfone..." enquanto isso, em vez de ficar ~1s+
+  parado sem nenhuma indicação (correção da causa raiz identificada no
+  diagnóstico: a troca de view esperava `ensureMicStream()` terminar antes
+  de renderizar).
+- Vídeo/tela compartilhada ocupa o espaço todo quando só tem 1 transmissão
+  (antes sobrava espaço morto do lado).
+- Empty state no chat de texto vazio ("Bem-vindo a #canal").
+- Toast reposicionado pra nunca cobrir o header, o botão de Aprovações ou o
+  título do painel de participantes.
+- Sidebar de canais ganhou um toggle que funciona em qualquer largura de
+  janela (antes sumia abaixo de 768px sem nenhum jeito de reabrir). O
+  toggle de participantes, que tinha o mesmo problema (pré-existente, não
+  introduzido agora), foi corrigido junto — ver `BUGS.md`.
+
+**Testado** de ponta a ponta com Playwright pilotando o Electron de verdade
+contra um servidor local: conectar, trocar de canal, enviar/receber
+mensagem, aprovação de entrada, entrar/sair de voz (com medição do tempo de
+feedback), mutar mic, compartilhar/parar de compartilhar tela, abrir modal
+de qualidade, redimensionar (1366×768, 1920×1080, 700px), toggles de
+sidebar nas duas larguras, sair da sala. Nenhum erro de console em nenhum
+passo.
+
+**Build empacotado testado também** (`electron-builder --dir` → `Roshan.exe` de
+verdade, não `electron .`): entrar na sala, voz, e especialmente a captura
+nativa de áudio de tela cheia (o tipo de coisa que historicamente só
+quebrava no empacotado, ver `BUGS.md` 2026-09-01) — tudo funcionou igual ao
+modo dev. Único achado: um warning de console cosmético e inofensivo
+("Failed to load resource" pra uma URL bugada tipo `${s.thumbnail}`) —
+causado pelo scanner de pré-carregamento do Chromium lendo bytes crus de
+dentro de um template literal JS como se fosse HTML; nunca chega a afetar
+nada funcional (a imagem real da miniatura carrega normal depois). Não vale
+a pena mexer no código só por causa disso.
+
+---
+
+## [x] 6. Sair da sala / trocar de servidor sem fechar o app (CORRIGIDO, não deployado ainda)
+
+Reportado pelo Patrick com print: depois de entrar numa sala, não tinha
+como voltar pro seletor e entrar em outra sem fechar o app inteiro. No
+caminho, achamos a causa de um bug relacionado: nome de sala virava
+"[object Object]" e ficava permanente por falta de validação no servidor.
+Os dois foram corrigidos juntos — detalhe técnico e validação automatizada
+em `BUGS.md` (2026-09-02).
+
+---
+
+## [ ] 7. Supressão de ruído tipo Krisp (RNNoise)
+
+Pedido do Patrick: o Discord tem o Krisp pra cortar ruído de fundo, dá pra
+ter algo parecido?
+
+Krisp em si é uma SDK paga/proprietária — não dá só "instalar". O
+microfone já usa a supressão de ruído nativa do Chromium
+(`noiseSuppression: true` em `ensureMicStream()`), mas é mais fraca que o
+Krisp.
+
+**Alternativa gratuita de qualidade parecida**: RNNoise (open-source, roda
+via WASM). Daria pra integrar no mesmo pipeline de AudioWorklet que já
+existe pra áudio nativo (`setupNativeAudioPlumbing`), processando o áudio
+do microfone antes de mandar pro chat de voz. Não é trivial (precisa achar/
+empacotar o build WASM do RNNoise e encaixar no worklet), então vale
+avaliar o esforço antes de entrar na fila.
+
+---
+
+## [x] 1. Compartilhar "Tela Cheia" com áudio do sistema não funciona (CORRIGIDO, não deployado ainda)
 
 **Pedido:** arrumar igual o Discord faz (compartilha tela cheia + som do
 sistema junto, sem precisar de dispositivo virtual).
@@ -27,6 +154,24 @@ o problema deve estar.
 cobrir o cenário de tela cheia também, em vez de depender da API legada do
 Chromium — é basicamente o mesmo caminho que o Discord usa (captura nativa
 do Windows, não a API do navegador).
+
+**Feito:** a lib `loopback-capture` já tem um modo pronto pra isso
+(`startSystemAudio`, sem PID — pega o que o dispositivo de saída padrão
+está tocando). Adicionado `start-system-audio-capture` no `main.js`/
+`preload.js`, e `index.html` agora usa esse caminho nativo quando a fonte
+escolhida é "Tela Cheia" (`sourceId` começando com `screen:`), caindo pro
+jeito antigo só se a captura nativa falhar. O mute-lock automático (evitar
+eco) continua valendo igual antes, porque captura de sistema inteiro ainda
+pega o que sai do chat de voz — só o "por app" (janela específica) escapa
+dessa trava.
+
+**Testado** com Playwright pilotando o app Electron de verdade (não só em
+dev, contra `node server.js` local): compartilhar "Tela Cheia" com "Áudio
+do Sistema" funciona sem erro. No caminho, achamos e corrigimos um bug real
+de CSP que provavelmente já quebrava a captura por app desde a v1.8.0 —
+ver `BUGS.md` (2026-09-02). **Falta testar** o build empacotado
+(`electron-builder --dir`) — o teste até aqui rodou via `electron .`
+direto, não pelo instalador.
 
 ---
 
@@ -57,9 +202,14 @@ Realtime, Twilio, ou self-host coturn) e adicionar no `iceServers` do
 no serviço escolhido e ter as credenciais (usuário/senha ou API key) antes
 de implementar.
 
+**Bloqueado no Patrick:** preciso que você escolha o provedor e crie a
+conta — não dá pra eu gerar credenciais de um serviço de terceiro por
+você. Depois de ter usuário/senha (ou API key), me manda que eu coloco no
+`iceServers`.
+
 ---
 
-## [ ] 2b. Conexão do Boa cai e reconecta em loop (`transport error`/`transport close`)
+## [~] 2b. Conexão do Boa cai e reconecta em loop (`transport error`/`transport close`)
 
 Log mostra o socket do Boa desconectando e reconectando repetidamente
 (`Cliente conectado` + `[join] ... entrou na sala` de novo a cada poucos
@@ -74,6 +224,14 @@ antivírus/firewall no PC do Boa interferindo na conexão persistente
 timeout de inatividade entre o cliente e o Render. Precisa reproduzir de
 novo prestando atenção em quanto tempo a conexão dura antes de cair, e se
 acontece só parado numa tela específica ou o tempo todo.
+
+**Mitigação aplicada (não é a correção definitiva, porque a causa raiz
+ainda não tá confirmada):** `pingTimeout` do socket.io no `server.js` subiu
+de 20s (padrão) pra 60s. Isso dá mais tolerância pra hiccups breves de rede
+não derrubarem a conexão à toa — se a causa for algo tipo "a interface do
+Boa dorme por 1-2s e perde um ping", isso deve sumir. Se o loop continuar
+mesmo assim, aponta mais forte pra antivírus/firewall matando a conexão
+ativamente (não timeout), ou o próprio Render.
 
 ---
 
@@ -120,15 +278,17 @@ de passar batido mesmo estando ali.
 
 ---
 
-## [ ] 4. Microfone do Patrick parou de funcionar
+## [x] 4. Microfone do Patrick parou de funcionar (CANCELADO — voltou a funcionar sozinho)
 
-Reportado, mas a investigação foi interrompida antes de eu conseguir
-perguntar os detalhes (ícone aparece mudo? funciona em outros apps? começou
-depois de qual ação?). Retomar quando o Patrick puder testar de novo.
+Reportado, mas a investigação foi interrompida antes de conseguir
+perguntar os detalhes. Confirmado com o Patrick em 2026-09-02 que o
+microfone voltou a funcionar sem nenhuma mudança de código — provavelmente
+foi algo pontual do Windows/driver, não do app. Sem ação necessária; reabrir
+se acontecer de novo.
 
 ---
 
-## [ ] 5. (Feature grande) Sistema de aprovação de novos membros — "Guest" → "Membro"
+## [x] 5. Sistema de aprovação de novos membros (CORRIGIDO, não deployado ainda)
 
 Ideia trazida pelo Patrick: quem entra numa sala nova cai num cargo
 `Guest`/`Pendente`, só enxerga um canal de boas-vindas, fica numa fila até
@@ -145,7 +305,34 @@ de um banco de verdade (Postgres/Mongo) e um sistema de permissões por
 cargo — hoje só existe o conceito de "dono da sala" (token secreto), sem
 cargos intermediários.
 
-**Não é pra fazer de forma apressada.** Quando for a hora de encarar isso,
-vale conversar antes: dá pra fazer uma versão mais simples primeiro (ex: só
-uma lista de aprovação em memória, sem banco de dados de verdade) antes de
-partir pro modelo completo com bitmask de permissões que o prompt descreve.
+**Implementado (versão simples, escolhida com o Patrick):** sem banco de
+dados, sem cargos — o **dono da sala já existente é o decisor**. Toda vez
+que alguém tenta entrar numa sala já criada e não é o dono, fica numa tela
+de "Aguardando aprovação" até o dono aceitar ou recusar. O dono vê um botão
+"Aprovações" no cabeçalho (com contador) sempre que tiver alguém esperando,
+com nome/foto de cada um e botões de aprovar/recusar. Uma vez aprovado, a
+pessoa (pelo nome) não precisa pedir de novo enquanto o servidor não
+reiniciar — sem banco, isso não persiste além disso.
+
+- `server.js`: `roomPendingJoins` (fila por sala) + `roomApprovedNames`
+  (quem já foi aprovado nessa sessão do servidor), eventos `join-pending`,
+  `approve-join`, `reject-join`, `cancel-join-request`,
+  `pending-joins-update`.
+- `index.html`: modal "Aguardando aprovação" (quem tá entrando) e modal da
+  fila de aprovação (dono), botão no cabeçalho com badge de contagem.
+- **Testado** duas vezes: primeiro um script simulando dono + 3 convidados
+  direto no `server.js` (fica pendente, dono vê a fila, aprova, reconexão
+  do mesmo nome não pede de novo, recusa funciona), depois com Playwright
+  pilotando duas instâncias reais do Electron lado a lado (dono cria a
+  sala, convidado tenta entrar, vê o modal de espera, dono vê o badge +
+  fila com o nome certo, aprova, convidado entra, contagem de participantes
+  bate nos dois lados) — todos os cenários passaram na UI de verdade.
+  **Não testado ainda** no build empacotado.
+- **Como usar:** não precisa "cadastrar" ninguém com antecedência — o amigo
+  só entra na sala normalmente (nome + senha se tiver) e o pedido aparece
+  sozinho pro dono aprovar.
+
+**Não é o modelo completo** que o Patrick trouxe (cargos Guest/Membro,
+permissões, canal de boas-vindas) — é a versão mínima que resolve "eu
+decido quem entra". Se quiser evoluir pra esse modelo completo depois, vale
+conversar antes: aí sim precisa de banco de dados de verdade.

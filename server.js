@@ -8,7 +8,13 @@ const app = express();
 app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: "*" },
+  // Tolerância maior pra hiccups breves de rede (wifi instável, NIC saindo de
+  // economia de energia, etc.) não derrubarem a conexão à toa — o padrão
+  // (20s) é agressivo demais pra redes marginais e gera loop de
+  // desconecta/reconecta sem que a rede tenha realmente caído.
+  pingInterval: 25000,
+  pingTimeout: 60000
 });
 
 const DEFAULT_TEXT_CHANNELS = ['geral', 'off-topic'];
@@ -23,9 +29,31 @@ const roomBroadcasters = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomMessages = new Map(); // roomId -> Map<canalDeTexto, Array<mensagem>>
 const roomPasswords = new Map(); // roomId -> hash da senha (só existe se a sala tiver senha)
 const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a sala recebe)
+const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcional)
+const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
+
+// Fila de aprovação: quem entra numa sala já existente (e não é o dono) fica
+// pendente até o dono aprovar ou recusar. Tudo em memória (some se o
+// servidor reiniciar) -- não tem banco de dados nesse app ainda, então não
+// dá pra persistir "membros aprovados" além da vida do processo.
+const roomPendingJoins = new Map(); // roomId -> Map<socketId, { username, avatar }>
+const roomApprovedNames = new Map(); // roomId -> Set<username> (aprovados nessa sessão do servidor)
+
+function notifyPendingJoins(roomId) {
+  const pending = roomPendingJoins.get(roomId);
+  const list = pending
+    ? Array.from(pending.entries()).map(([userId, info]) => ({ userId, username: info.username, avatar: info.avatar }))
+    : [];
+  const members = rooms.get(roomId);
+  if (!members) return;
+  members.forEach(id => {
+    const s = io.sockets.sockets.get(id);
+    if (s?.data.isOwner) s.emit('pending-joins-update', list);
+  });
+}
 
 function getRoomList() {
-  return Array.from(rooms.keys()).map(name => ({ name, hasPassword: roomPasswords.has(name) }));
+  return Array.from(rooms.keys()).map(name => ({ name, hasPassword: roomPasswords.has(name), icon: roomIcons.get(name) || null }));
 }
 
 function cleanName(raw, maxLen) {
@@ -143,6 +171,66 @@ function leaveCurrentVoiceChannel(socket) {
   socket.data.voiceChannel = null;
 }
 
+// Termina o processo de entrada de um socket numa sala -- usado tanto pro
+// join direto (dono, ou sala nova) quanto pra quando uma entrada pendente é
+// aprovada. Espera que socket.data.username/avatar/isOwner já estejam
+// definidos antes de chamar.
+function completeJoin(socket, roomId) {
+  rooms.get(roomId).add(socket.id);
+  socket.join(roomId);
+  socket.data.room = roomId;
+  socket.data.voiceChannel = null;
+  socket.data.pendingRoom = null;
+
+  sendChannelsInfo(roomId);
+
+  const channels = roomChannels.get(roomId);
+  const messages = roomMessages.get(roomId);
+  const history = {};
+  channels.text.forEach(c => { history[c] = messages.get(c) || []; });
+  socket.emit('chat-history', history);
+
+  broadcastUserList(roomId);
+  broadcastVoiceChannels(roomId);
+
+  socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
+  io.emit('rooms-update', getRoomList());
+  notifyPendingJoins(roomId);
+
+  console.log(`[join] ${socket.id} (${socket.data.username}) entrou na sala "${roomId}"`);
+}
+
+// Tira um socket de uma sala sem desconectá-lo -- usado tanto quando ele
+// sai de propósito ('leave-room', pra trocar de servidor sem fechar o app)
+// quanto quando a conexão cai de vez (disconnect).
+function removeFromRoom(socket, room) {
+  leaveCurrentVoiceChannel(socket);
+  socket.leave(room);
+
+  if (!rooms.has(room)) return;
+  rooms.get(room).delete(socket.id);
+  if (rooms.get(room).size === 0) {
+    rooms.delete(room);
+    roomChannels.delete(room);
+    roomVoiceMembers.delete(room);
+    roomBroadcasters.delete(room);
+    roomMessages.delete(room);
+    roomPasswords.delete(room);
+    roomOwnerTokens.delete(room);
+    roomIcons.delete(room);
+    roomPendingJoins.delete(room);
+    roomApprovedNames.delete(room);
+    Array.from(passwordAttempts.keys())
+      .filter(k => k.endsWith(`|${room}`))
+      .forEach(k => passwordAttempts.delete(k));
+    io.emit('rooms-update', getRoomList());
+  } else {
+    broadcastUserList(room);
+    broadcastVoiceChannels(room);
+    io.to(room).emit('user-disconnected', socket.id);
+  }
+}
+
 function renameMapKey(map, oldKey, newKey) {
   if (map && map.has(oldKey) && !map.has(newKey)) {
     map.set(newKey, map.get(oldKey));
@@ -157,7 +245,17 @@ io.on('connection', (socket) => {
     socket.emit('rooms-list', getRoomList());
   });
 
-  socket.on('join-room', ({ roomId, username, avatar, password, ownerToken }) => {
+  socket.on('join-room', (payload) => {
+    const { username, avatar, password, ownerToken } = payload || {};
+    // roomId nunca era validado/limpo aqui -- qualquer string (incluindo lixo
+    // tipo "[object Object]" vindo de um bug em outro lugar) virava o nome
+    // literal e permanente da sala, sem chance de correção.
+    const roomId = cleanName(payload?.roomId, MAX_NAME_LENGTH);
+    if (!roomId) {
+      socket.emit('join-error', { reason: 'invalid-room-name' });
+      return;
+    }
+
     const isNewRoom = !rooms.has(roomId);
     const attemptKey = `${socket.handshake.address}|${roomId}`;
 
@@ -179,42 +277,118 @@ io.on('connection', (socket) => {
     if (isNewRoom) {
       rooms.set(roomId, new Set());
       if (password) roomPasswords.set(roomId, hashPassword(password));
+      roomApprovedNames.set(roomId, new Set());
     }
     ensureRoomStructures(roomId);
-    rooms.get(roomId).add(socket.id);
-    socket.join(roomId);
-    socket.data.username = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
-    socket.data.avatar = typeof avatar === 'string' ? avatar : null;
-    socket.data.room = roomId;
-    socket.data.voiceChannel = null;
+
+    const cleanUsername = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
+    const cleanAvatar = typeof avatar === 'string' ? avatar : null;
+    const isOwnerByToken = !isNewRoom && !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
+    const approvedSet = roomApprovedNames.get(roomId);
+    const alreadyApproved = !!approvedSet && approvedSet.has(cleanUsername);
+
+    // Sistema de aprovação: quem entra numa sala já existente pela primeira
+    // vez (e não é o dono) fica pendente até o dono aprovar ou recusar pelo
+    // próprio app. Uma vez aprovado, o nome fica liberado enquanto o
+    // servidor não reiniciar (sem banco de dados ainda, não persiste além
+    // disso).
+    if (!isNewRoom && !isOwnerByToken && !alreadyApproved) {
+      socket.data.username = cleanUsername;
+      socket.data.avatar = cleanAvatar;
+      socket.data.pendingRoom = roomId;
+      if (!roomPendingJoins.has(roomId)) roomPendingJoins.set(roomId, new Map());
+      roomPendingJoins.get(roomId).set(socket.id, { username: cleanUsername, avatar: cleanAvatar });
+
+      socket.emit('join-pending', { roomId });
+      notifyPendingJoins(roomId);
+      console.log(`[join-pending] ${socket.id} (${cleanUsername}) aguardando aprovação pra entrar em "${roomId}"`);
+      return;
+    }
+
+    socket.data.username = cleanUsername;
+    socket.data.avatar = cleanAvatar;
+    socket.data.pendingRoom = null;
 
     // Dono da sala: quem cria recebe um token secreto (guardado só no cliente
     // dele) que prova a autoria em futuras reconexões — sem isso, qualquer um
-    // que entrasse na sala poderia expulsar/renomear à vontade.
+    // que entrasse na sala poderia expulsar/renomear/aprovar à vontade.
     if (isNewRoom) {
       const token = crypto.randomBytes(16).toString('hex');
       roomOwnerTokens.set(roomId, token);
       socket.data.isOwner = true;
       socket.emit('owner-token', { roomId, token });
     } else {
-      socket.data.isOwner = !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
+      socket.data.isOwner = isOwnerByToken;
     }
 
-    sendChannelsInfo(roomId);
+    completeJoin(socket, roomId);
+  });
 
-    const channels = roomChannels.get(roomId);
-    const messages = roomMessages.get(roomId);
-    const history = {};
-    channels.text.forEach(c => { history[c] = messages.get(c) || []; });
-    socket.emit('chat-history', history);
+  // Dono aprova quem tá esperando -- move da fila pendente pra dentro da sala.
+  socket.on('approve-join', ({ userId }) => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou aprovar entrada sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    const pending = room ? roomPendingJoins.get(room) : null;
+    const entry = pending?.get(userId);
+    if (!entry) return;
 
-    broadcastUserList(roomId);
-    broadcastVoiceChannels(roomId);
+    pending.delete(userId);
+    const targetSocket = io.sockets.sockets.get(userId);
+    if (!targetSocket) { notifyPendingJoins(room); return; }
 
-    socket.to(roomId).emit('user-connected', { userId: socket.id, userName: socket.data.username });
-    io.emit('rooms-update', getRoomList());
+    if (!roomApprovedNames.has(room)) roomApprovedNames.set(room, new Set());
+    roomApprovedNames.get(room).add(entry.username);
 
-    console.log(`[join] ${socket.id} (${socket.data.username}) entrou na sala "${roomId}"${isNewRoom ? ' (nova sala, virou dono)' : ''}`);
+    targetSocket.data.isOwner = false;
+    completeJoin(targetSocket, room);
+    console.log(`[join-approved] ${socket.data.username} (${socket.id}) aprovou ${entry.username} (${userId}) na sala "${room}"`);
+  });
+
+  // Dono recusa quem tá esperando -- não entra, mas pode tentar de novo depois.
+  socket.on('reject-join', ({ userId }) => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou recusar entrada sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    const pending = room ? roomPendingJoins.get(room) : null;
+    const entry = pending?.get(userId);
+    if (!entry) return;
+
+    pending.delete(userId);
+    const targetSocket = io.sockets.sockets.get(userId);
+    if (targetSocket) {
+      targetSocket.data.pendingRoom = null;
+      targetSocket.emit('join-rejected', { by: socket.data.username });
+    }
+    notifyPendingJoins(room);
+    console.log(`[join-rejected] ${socket.data.username} (${socket.id}) recusou ${entry.username} (${userId}) na sala "${room}"`);
+  });
+
+  // Quem tava esperando desistiu (fechou o modal, saiu do app) -- some da fila.
+  socket.on('cancel-join-request', () => {
+    const room = socket.data.pendingRoom;
+    if (!room) return;
+    roomPendingJoins.get(room)?.delete(socket.id);
+    socket.data.pendingRoom = null;
+    notifyPendingJoins(room);
+  });
+
+  // Sai da sala atual sem fechar a conexão -- pra trocar de servidor sem
+  // precisar fechar e reabrir o app inteiro (antes não existia jeito nenhum
+  // de fazer isso uma vez dentro de uma sala).
+  socket.on('leave-room', () => {
+    const room = socket.data.room;
+    if (!room) return;
+    removeFromRoom(socket, room);
+    socket.data.room = null;
+    socket.data.isOwner = false;
+    socket.data.voiceChannel = null;
+    socket.data.pendingRoom = null;
+    console.log(`[leave-room] ${socket.id} (${socket.data.username}) saiu da sala "${room}"`);
   });
 
   socket.on('rename-self', ({ newName }) => {
@@ -258,10 +432,28 @@ io.on('connection', (socket) => {
     renameMapKey(roomMessages, oldRoom, trimmed);
     renameMapKey(roomPasswords, oldRoom, trimmed);
     renameMapKey(roomOwnerTokens, oldRoom, trimmed);
+    renameMapKey(roomIcons, oldRoom, trimmed);
+    renameMapKey(roomPendingJoins, oldRoom, trimmed);
+    renameMapKey(roomApprovedNames, oldRoom, trimmed);
 
     io.to(trimmed).emit('room-renamed', { newName: trimmed });
     io.emit('rooms-update', getRoomList());
     console.log(`[rename] ${socket.id} renomeou a sala "${oldRoom}" pra "${trimmed}"`);
+  });
+
+  // Dono define/troca o ícone da sala (mostrado na lista de salas e na barra
+  // de servidores conhecidos do cliente).
+  socket.on('update-room-icon', ({ icon }) => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou trocar o ícone da sala sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    if (!room) return;
+    const clean = typeof icon === 'string' && icon && icon.length <= MAX_ICON_LENGTH ? icon : null;
+    if (clean) roomIcons.set(room, clean); else roomIcons.delete(room);
+    io.emit('rooms-update', getRoomList());
+    console.log(`[icone-sala] ${socket.id} atualizou o ícone da sala "${room}"`);
   });
 
   socket.on('rename-channel', ({ type, oldName, newName }) => {
@@ -435,30 +627,13 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     const room = socket.data.room;
     console.log(`[disconnect] ${socket.id} (${socket.data.username || '?'}) motivo: ${reason}`);
-    if (room) {
-      leaveCurrentVoiceChannel(socket);
 
-      if (rooms.has(room)) {
-        rooms.get(room).delete(socket.id);
-        if (rooms.get(room).size === 0) {
-          rooms.delete(room);
-          roomChannels.delete(room);
-          roomVoiceMembers.delete(room);
-          roomBroadcasters.delete(room);
-          roomMessages.delete(room);
-          roomPasswords.delete(room);
-          roomOwnerTokens.delete(room);
-          Array.from(passwordAttempts.keys())
-            .filter(k => k.endsWith(`|${room}`))
-            .forEach(k => passwordAttempts.delete(k));
-          io.emit('rooms-update', getRoomList());
-        } else {
-          broadcastUserList(room);
-          broadcastVoiceChannels(room);
-          io.to(room).emit('user-disconnected', socket.id);
-        }
-      }
+    if (socket.data.pendingRoom) {
+      roomPendingJoins.get(socket.data.pendingRoom)?.delete(socket.id);
+      notifyPendingJoins(socket.data.pendingRoom);
     }
+
+    if (room) removeFromRoom(socket, room);
   });
 });
 

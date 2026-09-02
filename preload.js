@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Áudio por aplicativo (captura só o processo da janela compartilhada)
     resolveWindowPid: (sourceId) => ipcRenderer.invoke('resolve-window-pid', sourceId),
     startAppAudioCapture: (pid) => ipcRenderer.invoke('start-app-audio-capture', pid),
+    // Áudio do sistema inteiro (nativo, usado quando a fonte é "Tela Cheia")
+    startSystemAudioCapture: () => ipcRenderer.invoke('start-system-audio-capture'),
     stopAppAudioCapture: () => ipcRenderer.send('stop-app-audio-capture'),
     onAppAudioChunk: (callback) => {
         const listener = (event, chunk) => callback(chunk);

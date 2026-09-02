@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://meu-servidor-webrtc-ifsp.onrender.com wss://meu-servidor-webrtc-ifsp.onrender.com stun: turn:; object-src 'none'; base-uri 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://meu-servidor-webrtc-ifsp.onrender.com wss://meu-servidor-webrtc-ifsp.onrender.com stun: turn:; object-src 'none'; base-uri 'none';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roshan</title>
     <link rel="icon" href="assets/logo.png">
@@ -50,7 +50,11 @@
         .control-btn.danger-state:hover { background-color: #dc2626; }
         .control-btn.volume-active { background-color: #22c55e; border-color: #4ade80; color: white; }
         .control-btn.volume-active:hover { background-color: #16a34a; }
-        .toast { position: fixed; top: 20px; right: -300px; background: #18181b; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: right 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 100; display: flex; align-items: center; gap: 12px; }
+        /* top: abaixo do header (56px) E do cabeçalho do painel de participantes
+           (que começa com margem própria ali do lado) -- um toast em top:20px
+           cobria o status de conexão, o botão de Aprovações e o título
+           "Participantes". */
+        .toast { position: fixed; top: 148px; right: -320px; max-width: 320px; background: #18181b; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: right 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 40; display: flex; align-items: center; gap: 12px; }
         .toast.show { right: 20px; }
         .screen-option:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
         ::-webkit-scrollbar { width: 6px; }
@@ -157,23 +161,17 @@
 
     <!-- MODAL DE CONEXÃO -->
     <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4 relative">
+            <button id="btn-close-connection-modal" class="hidden absolute top-4 right-4 text-zinc-500 hover:text-white" title="Fechar"><i class="ph ph-x text-lg"></i></button>
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
             <div id="discovery-status" class="text-sm text-yellow-500 flex items-center gap-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
                 <i class="ph ph-spinner-gap animate-spin"></i> Conectando ao servidor...
             </div>
             <input type="text" id="input-username" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite seu nome (Opcional)">
 
-            <!-- ENTRADA RÁPIDA: mostrado quando já existe uma sala salva -->
-            <div id="quick-join-section" class="hidden flex flex-col gap-2">
-                <button id="btn-quick-join" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-3 rounded-lg transition-colors disabled:opacity-50" disabled>
-                    Entrar em "<span id="quick-join-room-name"></span>"
-                </button>
-                <button id="btn-switch-room" type="button" class="text-xs text-zinc-500 hover:text-zinc-300 underline self-center">Trocar de sala</button>
-            </div>
-
-            <!-- ESCOLHER/CRIAR SALA: mostrado na primeira vez, ou ao clicar em "Trocar de sala" -->
-            <div id="full-room-section" class="hidden border-t border-zinc-800 pt-4 mt-2">
+            <!-- ESCOLHER/CRIAR SALA: sempre mostrado -- entrar sempre passa por
+                 aqui, pra ficar claro que dá pra escolher outro servidor. -->
+            <div id="full-room-section" class="border-t border-zinc-800 pt-4 mt-2">
                 <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
                 <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]"></div>
                 <div class="flex gap-2">
@@ -199,6 +197,27 @@
                     <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors">Entrar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL: aguardando aprovação do dono da sala (visto por quem tá entrando) -->
+    <div id="join-pending-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4 items-center text-center">
+            <i class="ph ph-hourglass-medium text-4xl text-blue-500 animate-pulse"></i>
+            <h2 class="text-xl font-bold">Aguardando aprovação</h2>
+            <p class="text-sm text-zinc-400">O dono da sala precisa aprovar sua entrada antes de você continuar. Isso só acontece na primeira vez que você entra nessa sala.</p>
+            <button id="btn-cancel-join-request" type="button" class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- MODAL: fila de aprovação (visto pelo dono da sala) -->
+    <div id="pending-approvals-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-user-plus text-blue-500"></i> Aprovar entrada</h2>
+                <button id="btn-close-pending-approvals-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <div id="pending-approvals-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto"></div>
         </div>
     </div>
 
@@ -255,29 +274,43 @@
     <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
     <div id="voice-audio-container" style="display:none"></div>
 
-    <!-- HEADER -->
-    <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
-        <div class="flex items-center gap-3">
-            <img src="assets/logo.png" class="w-14 h-14 rounded-xl object-cover flex-shrink-0" alt="Roshan">
-            <h1 class="text-2xl brand-name tracking-wide">Roshan</h1>
+    <!-- HEADER (marca + contexto do canal atual + status) -->
+    <header class="flex-shrink-0 h-14 px-5 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
+        <div class="flex items-center gap-3 min-w-0">
+            <img src="assets/logo.png" class="w-9 h-9 rounded-lg object-cover flex-shrink-0" alt="Roshan">
+            <h1 class="text-lg brand-name tracking-wide flex-shrink-0">Roshan</h1>
+            <div class="w-px h-5 bg-zinc-800 flex-shrink-0"></div>
+            <div id="channel-header" class="flex items-center gap-2 text-zinc-200 text-sm font-semibold min-w-0"></div>
         </div>
-        <div class="flex items-center gap-4 text-sm text-zinc-400">
+        <div class="flex items-center gap-4 text-sm text-zinc-400 flex-shrink-0">
+            <button id="btn-pending-approvals" class="hidden relative flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors text-xs font-medium" title="Aprovar quem tá esperando pra entrar">
+                <i class="ph ph-user-plus"></i> Aprovações <span id="pending-approvals-badge" class="bg-white/20 rounded-full px-1.5">0</span>
+            </button>
             <div id="connection-status" class="flex items-center gap-2">
                 <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
                 <span id="status-text">Desconectado</span>
             </div>
-            <span id="current-time" class="font-mono bg-zinc-900 px-3 py-1 rounded-md border border-zinc-800">00:00</span>
         </div>
     </header>
 
     <!-- MAIN -->
     <main class="flex-1 flex min-h-0 relative">
 
+        <!-- BARRA DE SERVIDORES CONHECIDOS (troca rápida entre salas) -->
+        <aside id="server-rail" class="w-[72px] h-full bg-zinc-950 border-r border-zinc-800 flex flex-col items-center flex-shrink-0 py-3 gap-2 overflow-y-auto hidden md:flex">
+            <div id="server-rail-list" class="flex flex-col gap-2 items-center"></div>
+            <button id="btn-server-rail-add" class="w-11 h-11 rounded-3xl bg-zinc-800 text-emerald-400 hover:rounded-2xl hover:bg-emerald-600 hover:text-white transition-all duration-150 flex items-center justify-center flex-shrink-0" title="Entrar em outra sala / criar nova">
+                <i class="ph ph-plus text-xl"></i>
+            </button>
+        </aside>
+
         <!-- SIDEBAR DE CANAIS -->
-        <aside class="w-60 h-full bg-zinc-950/60 border-r border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="h-14 border-b border-zinc-800 flex items-center gap-2 px-4 group">
-                <h2 class="font-semibold text-sm text-zinc-200 truncate flex-1" id="server-name-label">Sala</h2>
-                <button id="btn-rename-room" class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-sm"></i></button>
+        <aside id="channels-sidebar" class="w-60 h-full bg-zinc-950/60 border-r border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
+            <div class="h-14 border-b border-zinc-800 flex items-center gap-1 px-3 flex-shrink-0">
+                <h2 class="font-semibold text-sm text-zinc-200 truncate flex-1 px-1" id="server-name-label">Sala</h2>
+                <button id="btn-room-icon" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Trocar ícone da sala"><i class="ph ph-image text-sm"></i></button>
+                <button id="btn-rename-room" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-sm"></i></button>
+                <button id="btn-leave-room" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Sair da sala / trocar de servidor"><i class="ph ph-sign-out text-sm"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
                 <div>
@@ -293,17 +326,23 @@
                     <div id="voice-channels-list" class="flex flex-col gap-0.5"></div>
                 </div>
             </div>
-            <div id="voice-status-bar" class="hidden border-t border-zinc-800 p-3 items-center gap-2 bg-zinc-900/60">
+            <div id="voice-status-bar" class="hidden border-t border-zinc-800 p-3 items-center gap-2 bg-zinc-900/60 flex-shrink-0">
                 <span class="live-dot-green flex-shrink-0"></span>
                 <span class="text-xs text-zinc-300 flex-1 truncate" id="voice-status-label"></span>
                 <button id="btn-leave-voice-channel" class="text-zinc-400 hover:text-red-400 flex-shrink-0" title="Sair da sala de voz"><i class="ph ph-phone-disconnect"></i></button>
+            </div>
+            <!-- BLOCO FIXO DO USUÁRIO: sempre visível, não só durante uma call -->
+            <div class="flex-shrink-0 border-t border-zinc-800 px-2.5 py-2.5 flex items-center gap-2.5 bg-black/20">
+                <div id="own-user-avatar-wrap" class="flex-shrink-0"></div>
+                <span id="own-user-name" class="flex-1 min-w-0 text-sm text-zinc-200 truncate">Você</span>
+                <div id="own-user-mic-icon" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 flex-shrink-0" title="Estado do seu microfone">
+                    <i class="ph ph-microphone text-sm"></i>
+                </div>
             </div>
         </aside>
 
         <!-- CONTEÚDO: CHAT DE TEXTO OU SALA DE VOZ -->
         <div class="flex-1 h-full flex flex-col relative min-w-0">
-            <div id="channel-header" class="h-12 border-b border-zinc-800 flex items-center px-4 gap-2 flex-shrink-0 text-zinc-200 text-sm font-medium"></div>
-
             <div id="text-chat-panel" class="hidden flex-1 flex-col min-h-0 p-4 md:p-6">
                 <div id="chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-3 pr-2"></div>
                 <form id="chat-input-form" class="mt-3 flex gap-2 flex-shrink-0">
@@ -330,39 +369,50 @@
         </aside>
     </main>
 
-    <!-- FOOTER -->
-    <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-4 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+    <!-- FOOTER: prioridade visual -- mic/tela/sair (principais, maiores) vs utilitários (secundários, menores) -->
+    <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-6 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
 
-        <button class="control-btn disabled-btn" id="btn-mic" title="Entre em uma sala de voz para usar o microfone" style="width: 44px; height: 44px; font-size: 20px;">
-            <i class="ph ph-microphone text-xl"></i>
-        </button>
-
-        <button class="control-btn disabled-btn mx-2 w-16 h-16 bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Entre em uma sala de voz para compartilhar sua tela"><i class="ph ph-screencast text-3xl"></i></button>
-
-        <div class="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-4 py-1">
-            <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)" style="width: 44px; height: 44px; font-size: 20px; background-color: #27272a; border-color: #3f3f46;">
-                <i class="ph ph-speaker-simple-slash text-xl"></i>
+        <!-- grupo 1: controles principais da chamada (maior peso visual) -->
+        <div class="flex items-center gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl px-3 py-2">
+            <button class="control-btn disabled-btn" id="btn-mic" title="Entre em uma sala de voz para usar o microfone" style="width: 52px; height: 52px; font-size: 22px;">
+                <i class="ph ph-microphone text-2xl"></i>
             </button>
-            <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)">
+
+            <button class="control-btn disabled-btn bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Entre em uma sala de voz para compartilhar sua tela" style="width: 52px; height: 52px; font-size: 22px;"><i class="ph ph-screencast text-2xl"></i></button>
         </div>
 
-        <button class="control-btn" id="btn-quality" title="Qualidade de Vídeo">
-            <i class="ph ph-gear-six text-2xl"></i>
-        </button>
+        <!-- grupo 2: utilitários do app -- secundários (menores, mais discretos) -->
+        <div class="flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/70 rounded-2xl px-2.5 py-1.5">
+            <div class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-3 py-1">
+                <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)" style="width: 34px; height: 34px; font-size: 15px; background-color: #27272a; border-color: #3f3f46;">
+                    <i class="ph ph-speaker-simple-slash text-base"></i>
+                </button>
+                <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)" style="width: 56px;">
+            </div>
 
-        <button class="control-btn" id="btn-fullscreen" title="Tela Cheia">
-            <i class="ph ph-arrows-out text-2xl"></i>
-        </button>
+            <button class="control-btn text-zinc-400" id="btn-quality" title="Qualidade de Vídeo" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
+                <i class="ph ph-gear-six text-base"></i>
+            </button>
 
-        <button class="control-btn" id="btn-toggle-participants" title="Ocultar/Mostrar lista de participantes">
-            <i class="ph ph-sidebar-simple text-2xl"></i>
-        </button>
+            <button class="control-btn text-zinc-400" id="btn-fullscreen" title="Tela Cheia" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
+                <i class="ph ph-arrows-out text-base"></i>
+            </button>
 
-        <button class="control-btn" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz">
-            <i class="ph ph-waveform text-2xl"></i>
-        </button>
+            <button class="control-btn text-zinc-400" id="btn-toggle-channels" title="Mostrar/ocultar lista de canais" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
+                <i class="ph ph-list text-base"></i>
+            </button>
 
-        <button class="control-btn danger-state disabled-btn ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair do canal de voz"><i class="ph ph-phone-disconnect text-2xl"></i></button>
+            <button class="control-btn text-zinc-400" id="btn-toggle-participants" title="Ocultar/Mostrar lista de participantes" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
+                <i class="ph ph-sidebar-simple text-base"></i>
+            </button>
+
+            <button class="control-btn text-zinc-400" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz" style="width: 34px; height: 34px; font-size: 15px; background-color: #18181b;">
+                <i class="ph ph-waveform text-base"></i>
+            </button>
+        </div>
+
+        <!-- grupo 3: sair da call (maior peso visual, cor destrutiva) -->
+        <button class="control-btn danger-state disabled-btn w-14 h-14 rounded-2xl" id="btn-leave" title="Sair do canal de voz"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
@@ -393,6 +443,7 @@
 
     <!-- INPUT OCULTO PARA TROCAR O AVATAR (clique no seu próprio avatar) -->
     <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
+    <input type="file" id="room-icon-file-input" accept="image/*" class="hidden">
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -428,7 +479,6 @@
             const btnShare = document.getElementById('btn-share');
             const btnVolume = document.getElementById('btn-volume');
             const volumeSlider = document.getElementById('volume-slider');
-            const timeDisplay = document.getElementById('current-time');
             const screenModal = document.getElementById('screen-modal');
             const sourcesList = document.getElementById('sources-list');
             const usersListEl = document.getElementById('users-list');
@@ -442,6 +492,8 @@
             inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
             let myAvatar = localStorage.getItem('ssp-avatar') || null;
             let amIOwner = false; // sou o dono da sala atual? (só o dono pode expulsar/renomear)
+            let hasEnteredRoom = false; // já passei pela aprovação/entrada dessa conexão? evita repetir a transição de UI a cada channels-info (ex: depois de renomear um canal)
+            let pendingApprovals = []; // [{ userId, username, avatar }] -- só populado se eu for dono
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
@@ -458,6 +510,7 @@
             let textChannels = [];
             let voiceChannels = [];
             let myVoiceChannel = null; // canal de voz que estou conectado (mic mesh ativo)
+            let connectingMic = false; // true entre entrar no canal e o microfone terminar de inicializar
             let viewingType = null; // 'text' ou 'voice' — o que está sendo mostrado no painel central
             let viewingChannel = null;
             const chatHistories = {}; // canal de texto -> array de mensagens
@@ -540,6 +593,24 @@
                     renderChannelSidebar();
                     renderVoiceMemberStrip();
                     showToast('Perfil', 'Foto de perfil atualizada.');
+                } catch (e) {
+                    showToast('Erro', 'Não foi possível usar essa imagem.', 'error');
+                }
+            });
+
+            // Ícone da sala (só o dono pode trocar) -- mesma redução de imagem
+            // usada pro avatar, mostrado na lista de salas e na barra de
+            // servidores conhecidos.
+            const roomIconFileInput = document.getElementById('room-icon-file-input');
+            document.getElementById('btn-room-icon').addEventListener('click', () => roomIconFileInput.click());
+            roomIconFileInput.addEventListener('change', async () => {
+                const file = roomIconFileInput.files[0];
+                roomIconFileInput.value = '';
+                if (!file) return;
+                try {
+                    const icon = await resizeImageToDataUrl(file);
+                    socket.emit('update-room-icon', { icon });
+                    showToast('Sala', 'Ícone da sala atualizado.');
                 } catch (e) {
                     showToast('Erro', 'Não foi possível usar essa imagem.', 'error');
                 }
@@ -653,13 +724,18 @@
             let audioCtx = null;
 
             // ==========================================
-            // ÁUDIO POR APLICATIVO (nativo, Windows) — captura só o processo da janela
-            // sendo compartilhada, igual o Discord faz. Não precisa de cabo virtual e
-            // não corre risco de vazar o chat de voz, já que é um processo totalmente
-            // separado do nosso app. Só funciona ao compartilhar uma JANELA específica
-            // (não "Tela Cheia", que não tem um processo único pra apontar).
+            // ÁUDIO NATIVO (Windows) — dois modos:
+            // - por app: captura só o processo da janela compartilhada, igual o
+            //   Discord faz. Não corre risco de vazar o chat de voz, já que é um
+            //   processo totalmente separado do nosso app. Só funciona ao
+            //   compartilhar uma JANELA específica.
+            // - sistema inteiro: usado quando a fonte é "Tela Cheia" (não tem um
+            //   processo único pra apontar). Ainda captura tudo que o PC reproduz
+            //   (inclui o chat de voz, por isso o mute-lock continua valendo), mas
+            //   usa WASAPI nativo em vez da API antiga/instável do Chromium.
             // ==========================================
             let usedNativeAppAudio = false;
+            let usedNativeSystemAudio = false;
             let nativeAudioCtx = null;
             let nativeAudioWorkletNode = null;
             let nativeAudioDest = null;
@@ -706,6 +782,29 @@
                 registerProcessor('pcm-player-processor', PCMPlayerProcessor);
             `;
 
+            // Monta o AudioContext/Worklet que converte os chunks PCM crus (vindos do
+            // processo nativo via IPC) numa MediaStreamTrack de áudio de verdade.
+            // Compartilhado pelos dois modos (por app / sistema inteiro).
+            async function setupNativeAudioPlumbing() {
+                nativeAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                const blobUrl = URL.createObjectURL(new Blob([PCM_WORKLET_CODE], { type: 'application/javascript' }));
+                await nativeAudioCtx.audioWorklet.addModule(blobUrl);
+                URL.revokeObjectURL(blobUrl);
+
+                nativeAudioWorkletNode = new AudioWorkletNode(nativeAudioCtx, 'pcm-player-processor', { outputChannelCount: [2] });
+                nativeAudioDest = nativeAudioCtx.createMediaStreamDestination();
+                nativeAudioWorkletNode.connect(nativeAudioDest);
+
+                stopNativeAudioListener = window.electronAPI.onAppAudioChunk((chunk) => {
+                    const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+                    const sampleCount = Math.floor(bytes.length / 2);
+                    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                    const floats = new Float32Array(sampleCount);
+                    for (let i = 0; i < sampleCount; i++) floats[i] = view.getInt16(i * 2, true) / 32768;
+                    nativeAudioWorkletNode.port.postMessage(floats, [floats.buffer]);
+                });
+            }
+
             // Tenta iniciar a captura nativa por app pra essa fonte. Retorna a
             // MediaStreamTrack de áudio pronta, ou null se não deu (aí quem chamou
             // deve cair de volta no jeito antigo de capturar áudio do sistema).
@@ -715,23 +814,7 @@
                     const pid = await window.electronAPI.resolveWindowPid(sourceId);
                     if (!pid) return null; // não é uma janela específica (ex: "Tela Cheia")
 
-                    nativeAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                    const blobUrl = URL.createObjectURL(new Blob([PCM_WORKLET_CODE], { type: 'application/javascript' }));
-                    await nativeAudioCtx.audioWorklet.addModule(blobUrl);
-                    URL.revokeObjectURL(blobUrl);
-
-                    nativeAudioWorkletNode = new AudioWorkletNode(nativeAudioCtx, 'pcm-player-processor', { outputChannelCount: [2] });
-                    nativeAudioDest = nativeAudioCtx.createMediaStreamDestination();
-                    nativeAudioWorkletNode.connect(nativeAudioDest);
-
-                    stopNativeAudioListener = window.electronAPI.onAppAudioChunk((chunk) => {
-                        const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-                        const sampleCount = Math.floor(bytes.length / 2);
-                        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-                        const floats = new Float32Array(sampleCount);
-                        for (let i = 0; i < sampleCount; i++) floats[i] = view.getInt16(i * 2, true) / 32768;
-                        nativeAudioWorkletNode.port.postMessage(floats, [floats.buffer]);
-                    });
+                    await setupNativeAudioPlumbing();
 
                     const started = await window.electronAPI.startAppAudioCapture(pid);
                     if (!started) { stopNativeAppAudio(); return null; }
@@ -745,8 +828,28 @@
                 }
             }
 
+            // Tenta iniciar a captura nativa do sistema inteiro (usada pra "Tela
+            // Cheia", que não tem um processo único pra filtrar). Mesmo retorno que
+            // tryStartNativeAppAudio: a track pronta, ou null se não deu.
+            async function tryStartNativeSystemAudio() {
+                if (!window.electronAPI || !window.electronAPI.startSystemAudioCapture) return null;
+                try {
+                    await setupNativeAudioPlumbing();
+
+                    const started = await window.electronAPI.startSystemAudioCapture();
+                    if (!started) { stopNativeAppAudio(); return null; }
+
+                    usedNativeSystemAudio = true;
+                    return nativeAudioDest.stream.getAudioTracks()[0];
+                } catch (e) {
+                    console.warn('Não foi possível iniciar a captura de áudio nativa do sistema:', e);
+                    stopNativeAppAudio();
+                    return null;
+                }
+            }
+
             function stopNativeAppAudio() {
-                if (usedNativeAppAudio && window.electronAPI && window.electronAPI.stopAppAudioCapture) {
+                if ((usedNativeAppAudio || usedNativeSystemAudio) && window.electronAPI && window.electronAPI.stopAppAudioCapture) {
                     window.electronAPI.stopAppAudioCapture();
                 }
                 if (stopNativeAudioListener) { stopNativeAudioListener(); stopNativeAudioListener = null; }
@@ -754,6 +857,7 @@
                 if (nativeAudioDest) { try { nativeAudioDest.disconnect(); } catch (e) { /* ignora */ } nativeAudioDest = null; }
                 if (nativeAudioCtx) { try { nativeAudioCtx.close(); } catch (e) { /* ignora */ } nativeAudioCtx = null; }
                 usedNativeAppAudio = false;
+                usedNativeSystemAudio = false;
             }
 
             // ==========================================
@@ -1010,6 +1114,25 @@
                     btnMic.innerHTML = '<i class="ph ph-microphone text-xl"></i>';
                     btnMic.classList.remove('danger-state');
                 }
+                const ownMicIcon = document.getElementById('own-user-mic-icon');
+                if (ownMicIcon) {
+                    ownMicIcon.innerHTML = isMicMuted ? '<i class="ph ph-microphone-slash text-sm"></i>' : '<i class="ph ph-microphone text-sm"></i>';
+                    ownMicIcon.classList.toggle('text-red-400', isMicMuted);
+                    ownMicIcon.classList.toggle('text-zinc-400', !isMicMuted);
+                }
+            }
+
+            // Bloco fixo do usuário na sidebar esquerda -- nome/avatar/mic sempre
+            // visíveis, não só quando conectado numa call de voz.
+            function updateOwnUserBlock() {
+                const nameEl = document.getElementById('own-user-name');
+                const avatarWrap = document.getElementById('own-user-avatar-wrap');
+                if (!nameEl || !avatarWrap) return;
+                const users = window._users || [];
+                const me = users.find(u => u.id === socket.id);
+                const name = me ? me.name : (inputUsername.value || 'Participante');
+                nameEl.textContent = name;
+                avatarWrap.innerHTML = avatarHtml({ id: socket.id || 'me', name, avatar: myAvatar }, 'w-8 h-8', false);
             }
 
             document.getElementById('btn-mic').addEventListener('click', async () => {
@@ -1154,6 +1277,15 @@
                 });
             });
 
+            // Sair da sala atual e voltar pro seletor de salas -- antes disso não
+            // existia nenhum jeito de trocar de servidor sem fechar o app inteiro.
+            document.getElementById('btn-leave-room').addEventListener('click', (e) => {
+                e.stopPropagation();
+                socket.emit('leave-room');
+                returnToLobby();
+                showFullRoomPicker();
+            });
+
             window.startEditChannelName = function (e, type, oldName) {
                 e.stopPropagation();
                 openRenamePopup(type === 'text' ? 'Nome do canal de texto' : 'Nome do canal de voz', oldName, e.clientX, e.clientY, (newName) => {
@@ -1199,10 +1331,21 @@
                 myVoiceChannel = channel;
                 viewingType = 'voice';
                 viewingChannel = channel;
+                connectingMic = true;
+
+                // Troca a tela JÁ (header, painel de voz) antes de esperar o
+                // microfone -- antes disso a tela ficava parada por até ~1s+ (mais
+                // na primeira vez, com o prompt de permissão do Windows) sem
+                // nenhum indicativo de que o clique funcionou.
+                setControlsEnabled(true);
+                renderChannelSidebar();
+                renderMainView();
 
                 socket.emit('join-voice-channel', { channel });
                 await ensureMicStream();
                 updateMicIcon();
+                connectingMic = false;
+                renderVoiceStagePlaceholder();
 
                 // Conecta com quem já está no canal (regra determinística evita glare)
                 const users = window._users || [];
@@ -1212,9 +1355,6 @@
                     if (socket.id > u.id) initiateVoiceCall(u.id);
                 });
 
-                setControlsEnabled(true);
-                renderChannelSidebar();
-                renderMainView();
                 showToast('Sala de Voz', `Você entrou em "${channel}".`);
             }
             window.joinVoiceChannel = joinVoiceChannel;
@@ -1253,6 +1393,7 @@
             function renderChannelSidebar() {
                 document.getElementById('server-name-label').textContent = currentRoom || 'Sala';
                 document.getElementById('btn-rename-room').classList.toggle('hidden', !amIOwner);
+                document.getElementById('btn-room-icon').classList.toggle('hidden', !amIOwner);
 
                 const textList = document.getElementById('text-channels-list');
                 textList.innerHTML = '';
@@ -1325,13 +1466,21 @@
                     textChatPanel.classList.remove('hidden');
                     textChatPanel.classList.add('flex');
                     voicePanelWrapper.style.display = 'none';
-                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
+                    // Canal de texto: neutro, ícone de #. Sem cor de "ao vivo" --
+                    // precisa ficar visualmente diferente de um canal de voz.
+                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-500"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderChatMessages();
                 } else if (viewingType === 'voice') {
                     textChatPanel.classList.add('hidden');
                     textChatPanel.classList.remove('flex');
                     voicePanelWrapper.style.display = 'flex';
-                    channelHeaderEl.innerHTML = `<i class="ph ph-speaker-high text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
+                    // Canal de voz: quando de fato conectado (mesh de áudio ativo),
+                    // fica verde com um selo "AO VIVO" -- não dá pra confundir com
+                    // só estar navegando/visualizando o canal sem ter entrado.
+                    const connectedHere = myVoiceChannel === viewingChannel;
+                    channelHeaderEl.innerHTML = connectedHere
+                        ? `<span class="live-dot-green"></span><i class="ph-fill ph-speaker-high text-emerald-400"></i> <span class="text-emerald-400">${escapeHtml(viewingChannel || '')}</span><span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5 ml-1 tracking-wide">AO VIVO</span>`
+                        : `<i class="ph ph-speaker-high text-zinc-500"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderVoiceMemberStrip();
                     renderVoiceStagePlaceholder();
                 }
@@ -1352,6 +1501,16 @@
                         <button type="button" id="btn-join-voice-cta" class="btn-join-call"><i class="ph-fill ph-phone-call"></i> Entrar na chamada</button>
                     `;
                     document.getElementById('btn-join-voice-cta').addEventListener('click', () => joinVoiceChannel(viewingChannel));
+                } else if (connectingMic) {
+                    // Feedback imediato: a tela já trocou pro canal de voz, mas o
+                    // microfone ainda tá inicializando (na primeira vez, inclui o
+                    // prompt de permissão do Windows). Sem isso, a tela ficava
+                    // parada sem nenhum indicador enquanto isso carregava.
+                    emptyState.innerHTML = `
+                        <div class="voice-cta-icon idle"><i class="ph ph-spinner-gap animate-spin"></i></div>
+                        <h2 class="text-xl font-medium text-zinc-200">Conectando microfone...</h2>
+                        <p class="text-sm text-zinc-500 max-w-xs">Só um instante.</p>
+                    `;
                 } else {
                     emptyState.innerHTML = `
                         <div class="voice-cta-icon idle"><i class="ph-fill ph-screencast"></i></div>
@@ -1420,6 +1579,19 @@
                 const container = document.getElementById('chat-messages');
                 const list = chatHistories[viewingChannel] || [];
                 container.innerHTML = '';
+                if (list.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'flex-1 flex flex-col items-center justify-center gap-2 text-center';
+                    empty.innerHTML = `
+                        <div class="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 mb-1">
+                            <i class="ph ph-chat-circle-text text-2xl"></i>
+                        </div>
+                        <h3 class="text-base font-semibold text-zinc-200">Bem-vindo a #${escapeHtml(viewingChannel || '')}</h3>
+                        <p class="text-xs text-zinc-500">Esse é o começo desta conversa.</p>
+                    `;
+                    container.appendChild(empty);
+                    return;
+                }
                 list.forEach(msg => container.appendChild(buildMessageEl(msg)));
                 container.scrollTop = container.scrollHeight;
             }
@@ -1448,9 +1620,6 @@
                 toastTimeout = setTimeout(() => toast.classList.remove('show'), 4000);
             }
 
-            setInterval(() => {
-                timeDisplay.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            }, 1000);
 
             // ==========================================
             // GRADE DE VÍDEOS (MÚLTIPLAS TELAS AO MESMO TEMPO)
@@ -1460,7 +1629,12 @@
                 emptyState.style.display = n === 0 ? 'flex' : 'none';
                 videoGrid.style.display = n === 0 ? 'none' : 'grid';
                 const cols = n <= 1 ? 1 : (n <= 4 ? 2 : Math.ceil(Math.sqrt(n)));
+                const rows = Math.ceil(n / cols) || 1;
                 videoGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                // Sem isso, uma única tile (linha "auto" implícita) só ocupava o
+                // espaço do próprio conteúdo, sobrando bastante área vazia ao lado
+                // em vez de preencher o palco de vídeo todo.
+                videoGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
                 renderVoiceStagePlaceholder();
             }
 
@@ -1605,48 +1779,144 @@
             // OCULTAR/MOSTRAR PAINEL DE PARTICIPANTES
             // ==========================================
             const participantsSidebar = document.getElementById('participants-sidebar');
-            function applyParticipantsVisibility(hidden) {
+            // forceAtAnyWidth=true (clique explícito no botão) usa style.display
+            // direto, que vence a classe "md:flex" (só funciona >=768px) e garante
+            // que reabrir sempre funciona, em qualquer largura de janela. Sem
+            // isso, "reabrir" numa janela estreita não tinha efeito nenhum.
+            function applyParticipantsVisibility(hidden, forceAtAnyWidth) {
                 if (hidden) {
-                    participantsSidebar.classList.add('hidden');
-                    participantsSidebar.classList.remove('md:flex');
+                    participantsSidebar.style.display = 'none';
+                } else if (forceAtAnyWidth) {
+                    participantsSidebar.style.display = 'flex';
                 } else {
-                    participantsSidebar.classList.remove('hidden');
-                    participantsSidebar.classList.add('md:flex');
+                    participantsSidebar.style.display = ''; // deixa o breakpoint padrão (hidden md:flex) decidir
                 }
             }
             let participantsHidden = localStorage.getItem('ssp-hide-participants') === '1';
-            applyParticipantsVisibility(participantsHidden);
+            applyParticipantsVisibility(participantsHidden, false);
 
             document.getElementById('btn-toggle-participants').addEventListener('click', () => {
-                participantsHidden = !participantsHidden;
+                // Decide pelo que tá REALMENTE visível na tela agora (não só pela
+                // preferência salva) -- numa janela estreita, o painel pode estar
+                // invisível por causa da largura mesmo com participantsHidden=false,
+                // e o clique precisa "abrir" nesse caso, não "fechar" de novo.
+                const isVisibleNow = participantsSidebar.offsetParent !== null;
+                participantsHidden = isVisibleNow;
                 localStorage.setItem('ssp-hide-participants', participantsHidden ? '1' : '0');
-                applyParticipantsVisibility(participantsHidden);
+                applyParticipantsVisibility(participantsHidden, true);
             });
 
+            // A sidebar de canais some sozinha abaixo de 768px (classes
+            // "hidden md:flex") e antes disso não tinha NENHUM jeito de reabrir --
+            // ficava impossível trocar de canal com a janela pequena. Esse botão
+            // força ela aberta via style.display (vence as classes do Tailwind sem
+            // depender de ordem de especificidade), independente da largura.
+            const channelsSidebarEl = document.getElementById('channels-sidebar');
+            const serverRailEl = document.getElementById('server-rail');
+            let channelsSidebarForcedOpen = false;
+            document.getElementById('btn-toggle-channels').addEventListener('click', () => {
+                channelsSidebarForcedOpen = !channelsSidebarForcedOpen;
+                channelsSidebarEl.style.display = channelsSidebarForcedOpen ? 'flex' : '';
+                serverRailEl.style.display = channelsSidebarForcedOpen ? 'flex' : '';
+            });
+
+            let latestRoomsList = []; // última lista de salas ativas recebida do servidor -- usada pela lista de escolha E pela barra de servidores conhecidos
             function renderRoomList(rooms) {
+                latestRoomsList = rooms || [];
                 const container = document.getElementById('rooms-list-container');
                 container.innerHTML = '';
                 if (rooms.length === 0) {
                     container.innerHTML = '<div class="text-sm text-zinc-500 text-center py-2">Nenhuma sala ativa no momento.</div>';
+                } else {
+                    rooms.forEach(({ name: roomName, hasPassword, icon }) => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center gap-2 justify-between p-2 bg-zinc-800/40 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 transition-colors';
+                        const iconHtml = icon
+                            ? `<img src="${icon}" class="w-6 h-6 rounded-md object-cover flex-shrink-0">`
+                            : `<div class="w-6 h-6 rounded-md bg-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-300 flex-shrink-0">${escapeHtml((roomName || '?').charAt(0).toUpperCase())}</div>`;
+                        div.innerHTML = `
+                            <span class="text-sm text-zinc-300 flex items-center gap-2 min-w-0">${iconHtml}<span class="truncate">${escapeHtml(roomName)}</span>${hasPassword ? '<i class="ph ph-lock-simple text-xs text-zinc-500 flex-shrink-0"></i>' : ''}</span>
+                            <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full flex-shrink-0">Entrar</span>
+                        `;
+                        div.addEventListener('click', () => {
+                            inputNewRoom.value = roomName;
+                            if (hasPassword) {
+                                openRoomPasswordPrompt(roomName);
+                            } else {
+                                btnCreateRoom.click();
+                            }
+                        });
+                        container.appendChild(div);
+                    });
+                }
+                renderServerRail();
+            }
+
+            // ==========================================
+            // BARRA DE SERVIDORES CONHECIDOS (troca rápida entre salas, tipo
+            // Discord) -- lembra localmente quais salas você já entrou. Trocar
+            // sai da sala atual e entra na escolhida, sem fechar o app.
+            // ==========================================
+            const KNOWN_ROOMS_KEY = 'ssp-known-rooms';
+            const MAX_KNOWN_ROOMS = 8;
+            function getKnownRooms() {
+                try { return JSON.parse(localStorage.getItem(KNOWN_ROOMS_KEY) || '[]'); } catch (e) { return []; }
+            }
+            function addKnownRoom(name) {
+                if (!name) return;
+                let list = getKnownRooms().filter(n => n !== name);
+                list.unshift(name);
+                list = list.slice(0, MAX_KNOWN_ROOMS);
+                localStorage.setItem(KNOWN_ROOMS_KEY, JSON.stringify(list));
+            }
+            function removeKnownRoom(name) {
+                const list = getKnownRooms().filter(n => n !== name);
+                localStorage.setItem(KNOWN_ROOMS_KEY, JSON.stringify(list));
+                renderServerRail();
+            }
+
+            function renderServerRail() {
+                const railList = document.getElementById('server-rail-list');
+                if (!railList) return;
+                railList.innerHTML = '';
+                const known = getKnownRooms();
+                const names = currentRoom && !known.includes(currentRoom) ? [currentRoom, ...known] : known;
+                names.forEach(name => {
+                    const meta = latestRoomsList.find(r => r.name === name);
+                    const isCurrent = name === currentRoom;
+                    const isOnline = !!meta;
+                    const wrap = document.createElement('div');
+                    wrap.className = 'relative flex items-center justify-center group';
+                    const btn = document.createElement('button');
+                    btn.className = 'w-11 h-11 flex-shrink-0 flex items-center justify-center transition-all duration-150 overflow-hidden ' +
+                        (isCurrent ? 'rounded-2xl bg-blue-600 text-white' : 'rounded-3xl bg-zinc-800 text-zinc-300 hover:rounded-2xl hover:bg-zinc-700');
+                    btn.style.opacity = isOnline || isCurrent ? '1' : '0.5';
+                    btn.title = name + (isOnline || isCurrent ? '' : ' (sem ninguém agora -- entrar cria de novo)');
+                    btn.innerHTML = meta?.icon
+                        ? `<img src="${meta.icon}" class="w-full h-full object-cover">`
+                        : `<span class="font-bold text-sm">${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`;
+                    btn.addEventListener('click', () => switchToRoom(name));
+                    wrap.appendChild(btn);
+                    if (isCurrent) {
+                        const bar = document.createElement('div');
+                        bar.className = 'absolute -left-2.5 w-1 h-7 bg-white rounded-r-full';
+                        wrap.appendChild(bar);
+                    }
+                    railList.appendChild(wrap);
+                });
+            }
+
+            function switchToRoom(name) {
+                if (!name || name === currentRoom) return;
+                // joinRoom() já cuida de avisar o servidor pra sair da sala atual
+                // antes de entrar na nova (evita ficar "fantasma" nas duas).
+                const meta = latestRoomsList.find(r => r.name === name);
+                const savedPw = localStorage.getItem('ssp-room-password-' + name) || '';
+                if (meta?.hasPassword && !savedPw) {
+                    openRoomPasswordPrompt(name);
                     return;
                 }
-                rooms.forEach(({ name: roomName, hasPassword }) => {
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center justify-between p-2 bg-zinc-800/40 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 transition-colors';
-                    div.innerHTML = `
-                        <span class="text-sm text-zinc-300"><i class="ph ${hasPassword ? 'ph-lock-simple' : 'ph-door'}"></i> ${escapeHtml(roomName)}</span>
-                        <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">Entrar</span>
-                    `;
-                    div.addEventListener('click', () => {
-                        inputNewRoom.value = roomName;
-                        if (hasPassword) {
-                            openRoomPasswordPrompt(roomName);
-                        } else {
-                            btnCreateRoom.click();
-                        }
-                    });
-                    container.appendChild(div);
-                });
+                joinRoom(name, savedPw);
             }
 
             // ==========================================
@@ -1978,7 +2248,6 @@
                 inputNewRoom.disabled = false;
                 document.getElementById('input-room-password').disabled = false;
                 btnCreateRoom.disabled = false;
-                document.getElementById('btn-quick-join').disabled = false;
                 showToast('Conectado', 'Servidor conectado.');
                 socket.emit('get-rooms');
             });
@@ -2027,12 +2296,86 @@
                 }
             });
 
+            // ==========================================
+            // APROVAÇÃO DE ENTRADA — quem entra numa sala já existente (e não é o
+            // dono) fica esperando aqui até o dono aprovar ou recusar.
+            // ==========================================
+            socket.on('join-pending', () => {
+                document.getElementById('join-pending-modal').classList.remove('hidden');
+                document.getElementById('join-pending-modal').classList.add('flex');
+            });
+
+            function hideJoinPendingModal() {
+                document.getElementById('join-pending-modal').classList.add('hidden');
+                document.getElementById('join-pending-modal').classList.remove('flex');
+            }
+
+            socket.on('join-rejected', ({ by }) => {
+                hideJoinPendingModal();
+                returnToLobby('Não aprovado', `${by || 'O dono da sala'} recusou sua entrada nessa sala.`);
+            });
+
+            document.getElementById('btn-cancel-join-request').addEventListener('click', () => {
+                socket.emit('cancel-join-request');
+                hideJoinPendingModal();
+                returnToLobby();
+            });
+
+            // Lado do dono: lista de quem tá esperando aprovação na sala atual.
+            socket.on('pending-joins-update', (list) => {
+                pendingApprovals = list || [];
+                updatePendingApprovalsUI();
+            });
+
+            function updatePendingApprovalsUI() {
+                const btn = document.getElementById('btn-pending-approvals');
+                const badge = document.getElementById('pending-approvals-badge');
+                const show = amIOwner && pendingApprovals.length > 0;
+                btn.classList.toggle('hidden', !show);
+                badge.textContent = pendingApprovals.length;
+                renderPendingApprovalsList();
+            }
+
+            function renderPendingApprovalsList() {
+                const container = document.getElementById('pending-approvals-list');
+                container.innerHTML = '';
+                if (pendingApprovals.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-zinc-500 text-center py-4">Ninguém esperando aprovação.</p>';
+                    return;
+                }
+                pendingApprovals.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-2 rounded-lg border border-zinc-700/50 bg-zinc-800/40';
+                    div.innerHTML = `
+                        ${avatarHtml({ id: p.userId, name: p.username, avatar: p.avatar }, 'w-8 h-8', false)}
+                        <span class="text-sm text-zinc-300 truncate flex-1">${escapeHtml(p.username)}</span>
+                        <button class="text-emerald-400 hover:text-emerald-300 flex-shrink-0" title="Aprovar" onclick="window.approveJoin('${p.userId}')"><i class="ph ph-check-circle text-lg"></i></button>
+                        <button class="text-red-400 hover:text-red-300 flex-shrink-0" title="Recusar" onclick="window.rejectJoin('${p.userId}')"><i class="ph ph-x-circle text-lg"></i></button>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            window.approveJoin = (userId) => socket.emit('approve-join', { userId });
+            window.rejectJoin = (userId) => socket.emit('reject-join', { userId });
+
+            document.getElementById('btn-pending-approvals').addEventListener('click', () => {
+                document.getElementById('pending-approvals-modal').classList.remove('hidden');
+                document.getElementById('pending-approvals-modal').classList.add('flex');
+            });
+            document.getElementById('btn-close-pending-approvals-modal').addEventListener('click', () => {
+                document.getElementById('pending-approvals-modal').classList.add('hidden');
+                document.getElementById('pending-approvals-modal').classList.remove('flex');
+            });
+
             socket.on('rooms-list', renderRoomList);
             socket.on('rooms-update', renderRoomList);
 
             socket.on('update-user-list', (users) => {
                 window._users = users;
                 amIOwner = !!users.find(u => u.id === socket.id)?.isOwner;
+                updatePendingApprovalsUI();
+                updateOwnUserBlock();
 
                 // Se alguém que eu assistia parou de transmitir ou saiu, removo a tela dele
                 const liveIds = new Set(users.filter(u => u.isStreaming).map(u => u.id));
@@ -2112,7 +2455,25 @@
                 });
             }
 
+            // Confirma a entrada de verdade na sala (chega via 'channels-info', que só
+            // é emitido pelo servidor depois que o join foi aceito -- direto, ou depois
+            // de aprovado). Guardado por 'hasEnteredRoom' pra não repetir a transição
+            // (fechar modal, toast "Conectado") toda vez que channels-info chega de
+            // novo por outro motivo, tipo renomear um canal.
+            function enterRoomUI() {
+                if (hasEnteredRoom) return;
+                hasEnteredRoom = true;
+                hideJoinPendingModal();
+                document.getElementById('connection-modal').classList.add('hidden');
+                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
+                statusText.textContent = currentRoom;
+                showToast('Conectado', `Sala: ${currentRoom}`);
+                addKnownRoom(currentRoom);
+                renderServerRail();
+            }
+
             socket.on('channels-info', ({ textChannels: tc, voiceChannels: vc }) => {
+                enterRoomUI();
                 textChannels = tc;
                 voiceChannels = vc;
                 if (!viewingType) {
@@ -2211,6 +2572,12 @@
             // antes de entrar numa sala nova quanto ao ser expulso/voltar pro lobby.
             function teardownRoomState() {
                 amIOwner = false;
+                hasEnteredRoom = false;
+                pendingApprovals = [];
+                updatePendingApprovalsUI();
+                updateOwnUserBlock();
+                renderServerRail();
+                hideJoinPendingModal();
                 if (isSharing) stopScreenShare();
                 Object.values(viewerPeers).forEach(pc => pc.close());
                 Object.values(senderPeers).forEach(pc => pc.close());
@@ -2245,12 +2612,13 @@
                 if (password) localStorage.setItem('ssp-room-password-' + roomName, password);
                 else localStorage.removeItem('ssp-room-password-' + roomName);
 
-                document.getElementById('connection-modal').classList.add('hidden');
-                currentRoom = roomName;
-                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
-                statusText.textContent = currentRoom;
-                showToast('Conectado', `Sala: ${currentRoom}`);
+                // Trocando de sala sem passar por returnToLobby (ex: clicando na
+                // barra de servidores, ou escolhendo outra sala já dentro do app):
+                // avisa o servidor pra sair da sala anterior antes de entrar na
+                // nova, senão o socket ficava "fantasma" nos dois lugares.
+                if (currentRoom && currentRoom !== roomName) socket.emit('leave-room');
 
+                currentRoom = roomName;
                 teardownRoomState();
 
                 const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
@@ -2295,40 +2663,37 @@
                 statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
                 statusText.textContent = '';
                 document.getElementById('connection-modal').classList.remove('hidden');
-                if (localStorage.getItem('ssp-last-room')) showQuickJoin(); else showFullRoomPicker();
+                document.getElementById('btn-close-connection-modal').classList.add('hidden');
                 if (toastTitle) showToast(toastTitle, toastMsg, 'error');
             }
 
             btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
 
             // ==========================================
-            // ENTRADA RÁPIDA: se já tem uma sala salva, pula a escolha
+            // ESCOLHA DE SALA: sempre passa pela lista de salas ativas (não pula
+            // direto pra última sala) -- pra sempre dar pra escolher outro
+            // servidor, em vez de só ter como "trocar" clicando num link discreto.
             // ==========================================
-            const quickJoinSection = document.getElementById('quick-join-section');
-            const fullRoomSection = document.getElementById('full-room-section');
-            const quickJoinRoomName = document.getElementById('quick-join-room-name');
-            const btnQuickJoin = document.getElementById('btn-quick-join');
-            const btnSwitchRoom = document.getElementById('btn-switch-room');
-            const lastRoom = localStorage.getItem('ssp-last-room');
-
-            function showQuickJoin() {
-                quickJoinRoomName.textContent = lastRoom;
-                quickJoinSection.classList.remove('hidden');
-                fullRoomSection.classList.add('hidden');
-            }
+            // Mantida por compatibilidade com quem já chama isso (returnToLobby,
+            // join-error) -- a seção agora fica sempre visível, então isso hoje só
+            // garante o foco fica no campo certo.
             function showFullRoomPicker() {
-                quickJoinSection.classList.add('hidden');
-                fullRoomSection.classList.remove('hidden');
+                document.getElementById('input-new-room').focus();
             }
+            updateOwnUserBlock();
+            updateMicIcon();
 
-            if (lastRoom) showQuickJoin(); else showFullRoomPicker();
-
-            btnQuickJoin.addEventListener('click', () => joinRoom(lastRoom, localStorage.getItem('ssp-room-password-' + lastRoom) || ''));
-            btnSwitchRoom.addEventListener('click', showFullRoomPicker);
-            inputUsername.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && lastRoom && !quickJoinSection.classList.contains('hidden')) {
-                    joinRoom(lastRoom);
-                }
+            // "+" na barra de servidores: abre o mesmo seletor de salas, mas por
+            // cima do app já conectado (pra entrar em outra sem perder o que já
+            // tava fazendo). O X só aparece nesse caso -- não faz sentido "fechar"
+            // a tela de login antes de escolher uma sala pela primeira vez.
+            document.getElementById('btn-server-rail-add').addEventListener('click', () => {
+                document.getElementById('connection-modal').classList.remove('hidden');
+                document.getElementById('btn-close-connection-modal').classList.remove('hidden');
+                document.getElementById('input-new-room').focus();
+            });
+            document.getElementById('btn-close-connection-modal').addEventListener('click', () => {
+                document.getElementById('connection-modal').classList.add('hidden');
             });
 
             // ==========================================
@@ -2432,11 +2797,16 @@
 
                     // Compartilhando uma JANELA específica com "Áudio do Sistema": tenta
                     // primeiro a captura nativa por processo (só o som desse app, sem
-                    // risco de eco, sem precisar de dispositivo separado). Só cai pro
-                    // jeito antigo (captura de todo o sistema) se não der certo.
+                    // risco de eco, sem precisar de dispositivo separado). Compartilhando
+                    // "Tela Cheia": usa a captura nativa do sistema inteiro (WASAPI),
+                    // mais estável que a API antiga do Chromium. Nos dois casos, só cai
+                    // pro jeito antigo (chromeMediaSource desktop) se a captura nativa
+                    // não der certo.
                     let nativeAudioTrack = null;
                     if (audioMode === 'system' && sourceId.startsWith('window:')) {
                         nativeAudioTrack = await tryStartNativeAppAudio(sourceId);
+                    } else if (audioMode === 'system' && sourceId.startsWith('screen:')) {
+                        nativeAudioTrack = await tryStartNativeSystemAudio();
                     }
 
                     let mediaConstraints = { video: videoConstraints, audio: false };
@@ -2469,9 +2839,11 @@
 
                     localStream = new MediaStream([videoTrack, ...audioTracks]);
 
-                    const audioLabel = nativeAudioTrack
+                    const audioLabel = usedNativeAppAudio
                         ? ' + áudio só desse app'
-                        : (audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)');
+                        : usedNativeSystemAudio
+                            ? ' + áudio do sistema (nativo)'
+                            : (audioMode === 'system' ? ' + áudio do sistema' : ' (sem áudio)');
                     onShareStarted(`Tela visível (${videoSettings.width}x${videoSettings.height})${audioLabel}`, audioMode);
                 } catch (err) {
                     console.error(err);
@@ -2490,7 +2862,7 @@
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(senderPeers).forEach(k => delete senderPeers[k]);
 
-                if (usedNativeAppAudio) stopNativeAppAudio();
+                if (usedNativeAppAudio || usedNativeSystemAudio) stopNativeAppAudio();
 
                 // Restaura o áudio que tinha sido silenciado automaticamente por causa
                 // do compartilhamento de áudio do sistema
