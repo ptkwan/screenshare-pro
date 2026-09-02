@@ -1858,10 +1858,28 @@
                 chatImagePreview.classList.add('hidden');
                 chatImagePreview.classList.remove('flex');
             }
+            // Mesmo teto do servidor (MAX_CHAT_IMAGE_LENGTH em server.js) -- precisa
+            // bater com o valor de lá. Ficar por baixo disso importa de verdade: um
+            // payload grande o bastante nem chega a ser "rejeitado" com uma mensagem
+            // de erro -- ele derruba a conexão inteira no meio do caminho (limite do
+            // próprio socket.io, testado direto no protocolo).
+            const CHAT_IMAGE_MAX_DATA_URL_LENGTH = 700_000;
             async function handleChatImageFile(file) {
                 if (!file || !file.type.startsWith('image/')) return;
                 try {
-                    setPendingChatImage(await resizeImageToDataUrlFit(file, CHAT_IMAGE_MAX_DIMENSION, 0.75));
+                    // Comprime progressivamente até caber no teto -- a maioria dos
+                    // prints já cabe na primeira tentativa (quality 0.75); só desce
+                    // mais se for uma imagem incomumente densa/grande.
+                    let dataUrl;
+                    for (const quality of [0.75, 0.5, 0.35, 0.2]) {
+                        dataUrl = await resizeImageToDataUrlFit(file, CHAT_IMAGE_MAX_DIMENSION, quality);
+                        if (dataUrl.length <= CHAT_IMAGE_MAX_DATA_URL_LENGTH) break;
+                    }
+                    if (dataUrl.length > CHAT_IMAGE_MAX_DATA_URL_LENGTH) {
+                        showToast('Erro', 'Essa imagem é grande demais mesmo comprimida. Tenta um print menor.', 'error');
+                        return;
+                    }
+                    setPendingChatImage(dataUrl);
                 } catch (e) {
                     showToast('Erro', 'Não foi possível usar essa imagem.', 'error');
                 }
