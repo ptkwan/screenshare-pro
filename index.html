@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://meu-servidor-webrtc-ifsp.onrender.com wss://meu-servidor-webrtc-ifsp.onrender.com stun: turn:; object-src 'none'; base-uri 'none';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roshan</title>
     <link rel="icon" href="assets/logo.png">
@@ -25,6 +25,22 @@
         .video-tile:hover .tile-remove, .video-tile:hover .tile-fullscreen { opacity: 1; }
         .live-dot-green { width: 8px; height: 8px; background-color: #22c55e; border-radius: 50%; flex-shrink: 0; }
         .video-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; z-index: 5; }
+        .voice-cta-icon {
+            width: 88px; height: 88px; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+            font-size: 38px; margin-bottom: 4px;
+            background: radial-gradient(circle at 32% 30%, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.04) 60%, transparent 72%);
+            border: 1px solid rgba(74, 222, 128, 0.35); color: #4ade80; box-shadow: 0 0 44px rgba(34, 197, 94, 0.14);
+        }
+        .voice-cta-icon.idle {
+            background: radial-gradient(circle at 32% 30%, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.04) 60%, transparent 72%);
+            border-color: rgba(96, 165, 250, 0.3); color: #60a5fa; box-shadow: 0 0 44px rgba(59, 130, 246, 0.12);
+        }
+        .btn-join-call {
+            margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; background: #22c55e; color: #fff;
+            font-weight: 600; font-size: 14px; padding: 11px 24px; border-radius: 9999px; border: 1px solid #4ade80;
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .btn-join-call:hover { background: #16a34a; transform: translateY(-2px); box-shadow: 0 10px 24px rgba(34, 197, 94, 0.3); }
         @keyframes pulse-ring { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         .recording-indicator { width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; animation: pulse-ring 2s infinite; flex-shrink: 0; }
         .control-btn { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; cursor: pointer; transition: all 0.2s ease; }
@@ -124,6 +140,17 @@
             background: rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.15s ease; color: #fff; font-size: 11px;
         }
         .avatar-wrap.avatar-editable:hover .avatar-edit-overlay { opacity: 1; }
+
+        /* Nome do app: gradiente dourado/laranja tirado das brasas e do olho da logo */
+        .brand-name {
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            background: linear-gradient(120deg, #fde68a 0%, #f59e0b 45%, #dc2626 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 22px rgba(249, 115, 22, 0.35);
+        }
     </style>
 </head>
 <body class="flex flex-col">
@@ -153,6 +180,7 @@
                     <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
                     <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
                 </div>
+                <input type="password" id="input-room-password" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm mt-2 focus:outline-none focus:border-blue-500" placeholder="Senha da sala (opcional pra criar, obrigatória se a sala já tiver uma)" disabled>
             </div>
         </div>
     </div>
@@ -213,8 +241,8 @@
     <!-- HEADER -->
     <header class="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
         <div class="flex items-center gap-3">
-            <img src="assets/logo.png" class="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="Roshan">
-            <h1 class="text-lg font-semibold tracking-wide">Roshan</h1>
+            <img src="assets/logo.png" class="w-14 h-14 rounded-xl object-cover flex-shrink-0" alt="Roshan">
+            <h1 class="text-2xl brand-name tracking-wide">Roshan</h1>
         </div>
         <div class="flex items-center gap-4 text-sm text-zinc-400">
             <div id="connection-status" class="flex items-center gap-2">
@@ -270,13 +298,7 @@
             <div id="voice-panel-wrapper" class="flex-1 flex-col p-4 md:p-6 min-h-0" style="display:none;">
                 <div id="voice-member-strip" class="flex flex-wrap gap-2 mb-4 flex-shrink-0"></div>
                 <div class="video-stage flex-1 min-h-0" id="main-video-wrapper">
-                    <div class="video-status" id="empty-state">
-                        <div class="w-20 h-20 rounded-full overflow-hidden mb-2 border border-zinc-700">
-                            <img src="assets/empty-state.jpg" class="w-full h-full object-cover" alt="">
-                        </div>
-                        <h2 class="text-xl font-medium text-zinc-200">Pronto para compartilhar</h2>
-                        <p class="text-sm text-zinc-500 max-w-xs">Clique em "AO VIVO" ao lado do nome de um participante para assistir a tela dele. Você pode assistir vários ao mesmo tempo, lado a lado.</p>
-                    </div>
+                    <div class="video-status" id="empty-state"></div>
                     <div class="video-grid" id="video-grid"></div>
                 </div>
             </div>
@@ -323,7 +345,7 @@
             <i class="ph ph-waveform text-2xl"></i>
         </button>
 
-        <button class="control-btn danger-state ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair da Reunião"><i class="ph ph-phone-disconnect text-2xl"></i></button>
+        <button class="control-btn danger-state disabled-btn ml-4 w-16 rounded-2xl" id="btn-leave" title="Sair do canal de voz"><i class="ph ph-phone-disconnect text-2xl"></i></button>
     </footer>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
@@ -335,6 +357,11 @@
             <i class="ph ph-speaker-high text-zinc-400 flex-shrink-0"></i>
             <input type="range" id="user-volume-slider" min="0" max="200" value="100" class="volume-slider flex-1">
             <span id="user-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
+        </div>
+        <div class="border-t border-zinc-800 mt-2 pt-2">
+            <button id="user-volume-menu-kick" type="button" class="w-full flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors">
+                <i class="ph ph-sign-out"></i> Expulsar da sala
+            </button>
         </div>
     </div>
 
@@ -383,6 +410,7 @@
             const inputNewRoom = document.getElementById('input-new-room');
             inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
             let myAvatar = localStorage.getItem('ssp-avatar') || null;
+            let amIOwner = false; // sou o dono da sala atual? (só o dono pode expulsar/renomear)
             const btnCreateRoom = document.getElementById('btn-create-room');
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
@@ -403,6 +431,14 @@
             let viewingChannel = null;
             const chatHistories = {}; // canal de texto -> array de mensagens
 
+            // Escapa texto que vem de outras pessoas (nome, sala, canal) antes de
+            // colocar em innerHTML — sem isso, alguém podia criar uma sala/canal/nome
+            // com HTML malicioso (ex: <img onerror="...">) e rodar script na tela de
+            // todo mundo que visse aquele nome, inclusive antes de entrar em qualquer sala.
+            function escapeHtml(str) {
+                return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            }
+
             const AVATAR_COLORS = ['bg-blue-600', 'bg-emerald-600', 'bg-purple-600', 'bg-amber-600', 'bg-pink-600', 'bg-cyan-600'];
             function colorForUser(id) {
                 let hash = 0;
@@ -418,7 +454,7 @@
                 const textSize = sizeClass === 'w-6 h-6' ? 'text-[10px]' : 'text-xs';
                 const inner = user.avatar
                     ? `<img src="${user.avatar}" data-avatar-for="${user.id}" class="${sizeClass} rounded-full object-cover avatar-badge" alt="">`
-                    : `<div data-avatar-for="${user.id}" class="${sizeClass} rounded-full ${user.id === socket.id ? 'bg-blue-600' : colorForUser(user.id)} flex items-center justify-center ${textSize} font-bold text-white avatar-badge">${(user.name || '?').charAt(0).toUpperCase()}</div>`;
+                    : `<div data-avatar-for="${user.id}" class="${sizeClass} rounded-full ${user.id === socket.id ? 'bg-blue-600' : colorForUser(user.id)} flex items-center justify-center ${textSize} font-bold text-white avatar-badge">${escapeHtml((user.name || '?').charAt(0).toUpperCase())}</div>`;
 
                 if (!editable) return `<div class="avatar-wrap flex-shrink-0">${inner}</div>`;
                 return `
@@ -964,18 +1000,21 @@
             // VOLUME POR USUÁRIO (CLIQUE COM O BOTÃO DIREITO, 0-200%)
             // ==========================================
             let volumeMenuPeerId = null;
+            let volumeMenuPeerName = null;
             const userVolumeMenu = document.getElementById('user-volume-menu');
             const userVolumeSlider = document.getElementById('user-volume-slider');
             const userVolumeValue = document.getElementById('user-volume-value');
 
             function openUserVolumeMenu(peerId, peerName, x, y) {
                 volumeMenuPeerId = peerId;
+                volumeMenuPeerName = peerName;
                 document.getElementById('user-volume-menu-name').textContent = `Volume de ${peerName}`;
                 const pct = Math.round((userVolumes[peerId] ?? 1.0) * 100);
                 userVolumeSlider.value = pct;
                 userVolumeValue.textContent = pct + '%';
+                document.getElementById('user-volume-menu-kick').closest('div').classList.toggle('hidden', !amIOwner);
 
-                const menuWidth = 224, menuHeight = 80;
+                const menuWidth = 224, menuHeight = amIOwner ? 124 : 76;
                 userVolumeMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
                 userVolumeMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
                 userVolumeMenu.classList.remove('hidden');
@@ -984,7 +1023,18 @@
             function closeUserVolumeMenu() {
                 userVolumeMenu.classList.add('hidden');
                 volumeMenuPeerId = null;
+                volumeMenuPeerName = null;
             }
+
+            document.getElementById('user-volume-menu-kick').addEventListener('click', () => {
+                if (!volumeMenuPeerId) return;
+                const name = volumeMenuPeerName || 'esse participante';
+                const peerId = volumeMenuPeerId;
+                closeUserVolumeMenu();
+                if (!confirm(`Expulsar ${name} da sala?`)) return;
+                socket.emit('kick-user', { userId: peerId });
+                showToast('Participante', `${name} foi expulso da sala.`);
+            });
 
             userVolumeSlider.addEventListener('input', () => {
                 if (!volumeMenuPeerId) return;
@@ -1081,12 +1131,15 @@
             // ==========================================
             function setControlsEnabled(enabled) {
                 const btnMicEl = document.getElementById('btn-mic');
+                const btnLeaveEl = document.getElementById('btn-leave');
                 if (enabled) {
                     btnMicEl.classList.remove('disabled-btn');
                     btnShare.classList.remove('disabled-btn');
+                    btnLeaveEl.classList.remove('disabled-btn');
                 } else {
                     btnMicEl.classList.add('disabled-btn');
                     btnShare.classList.add('disabled-btn');
+                    btnLeaveEl.classList.add('disabled-btn');
                 }
             }
 
@@ -1164,6 +1217,7 @@
             // ==========================================
             function renderChannelSidebar() {
                 document.getElementById('server-name-label').textContent = currentRoom || 'Sala';
+                document.getElementById('btn-rename-room').classList.toggle('hidden', !amIOwner);
 
                 const textList = document.getElementById('text-channels-list');
                 textList.innerHTML = '';
@@ -1171,8 +1225,8 @@
                     const div = document.createElement('div');
                     div.className = 'channel-item group' + (viewingType === 'text' && viewingChannel === ch ? ' active-channel' : '');
                     div.innerHTML = `
-                        <i class="ph ph-hash ch-icon"></i><span class="truncate flex-1">${ch}</span>
-                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                        <i class="ph ph-hash ch-icon"></i><span class="truncate flex-1">${escapeHtml(ch)}</span>
+                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${amIOwner ? '' : 'hidden'}" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
                     `;
                     div.addEventListener('click', () => viewTextChannel(ch));
                     div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'text', ch));
@@ -1187,8 +1241,8 @@
                     const div = document.createElement('div');
                     div.className = 'channel-item group' + (viewingType === 'voice' && viewingChannel === ch ? ' active-channel' : '');
                     div.innerHTML = `
-                        <i class="ph ph-speaker-high ch-icon"></i><span class="truncate flex-1">${ch}</span>
-                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                        <i class="ph ph-speaker-high ch-icon"></i><span class="truncate flex-1">${escapeHtml(ch)}</span>
+                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${amIOwner ? '' : 'hidden'}" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
                     `;
                     div.addEventListener('click', () => joinVoiceChannel(ch));
                     div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'voice', ch));
@@ -1201,9 +1255,13 @@
                         const micIcon = isSelf ? (isMicMuted ? 'ph-microphone-slash' : 'ph-microphone') : 'ph-microphone';
                         row.innerHTML = `
                             ${avatarHtml(m, 'w-6 h-6', isSelf)}
-                            <span class="truncate flex-1">${m.name}${isSelf ? ' (Você)' : ''}</span>
+                            <span class="truncate flex-1">${escapeHtml(m.name)}${isSelf ? ' (Você)' : ''}</span>
                             <i class="ph ${micIcon} text-[11px] flex-shrink-0"></i>
                         `;
+                        if (!isSelf) {
+                            row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
+                            attachVolumeContextMenu(row, m.id, m.name);
+                        }
                         voiceList.appendChild(row);
                     });
                 });
@@ -1232,14 +1290,39 @@
                     textChatPanel.classList.remove('hidden');
                     textChatPanel.classList.add('flex');
                     voicePanelWrapper.style.display = 'none';
-                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-400"></i> <span>${viewingChannel || ''}</span>`;
+                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderChatMessages();
                 } else if (viewingType === 'voice') {
                     textChatPanel.classList.add('hidden');
                     textChatPanel.classList.remove('flex');
                     voicePanelWrapper.style.display = 'flex';
-                    channelHeaderEl.innerHTML = `<i class="ph ph-speaker-high text-zinc-400"></i> <span>${viewingChannel || ''}</span>`;
+                    channelHeaderEl.innerHTML = `<i class="ph ph-speaker-high text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderVoiceMemberStrip();
+                    renderVoiceStagePlaceholder();
+                }
+            }
+
+            // Um único estado central por vez no palco de vídeo: "entrar na
+            // chamada" (não conectado ainda) ou "pronto, ninguém sendo assistido"
+            // (conectado). Antes essas duas mensagens apareciam juntas.
+            function renderVoiceStagePlaceholder() {
+                if (viewingType !== 'voice') return;
+                const connected = myVoiceChannel === viewingChannel;
+
+                if (!connected) {
+                    emptyState.innerHTML = `
+                        <div class="voice-cta-icon"><i class="ph-fill ph-phone-incoming"></i></div>
+                        <h2 class="text-xl font-semibold text-zinc-100">Entrar em "${escapeHtml(viewingChannel || '')}"</h2>
+                        <p class="text-sm text-zinc-500 max-w-xs">Conecte seu microfone pra conversar e compartilhar sua tela com quem estiver na sala.</p>
+                        <button type="button" id="btn-join-voice-cta" class="btn-join-call"><i class="ph-fill ph-phone-call"></i> Entrar na chamada</button>
+                    `;
+                    document.getElementById('btn-join-voice-cta').addEventListener('click', () => joinVoiceChannel(viewingChannel));
+                } else {
+                    emptyState.innerHTML = `
+                        <div class="voice-cta-icon idle"><i class="ph-fill ph-screencast"></i></div>
+                        <h2 class="text-xl font-medium text-zinc-200">Pronto para compartilhar</h2>
+                        <p class="text-sm text-zinc-500 max-w-xs">Clique em "AO VIVO" ao lado do nome de um participante para assistir a tela dele. Você pode assistir vários ao mesmo tempo, lado a lado.</p>
+                    `;
                 }
             }
 
@@ -1247,13 +1330,7 @@
                 const strip = document.getElementById('voice-member-strip');
                 strip.innerHTML = '';
 
-                if (!myVoiceChannel || viewingChannel !== myVoiceChannel) {
-                    const div = document.createElement('div');
-                    div.className = 'w-full flex items-center justify-center gap-3 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-zinc-400 text-sm';
-                    div.innerHTML = `<i class="ph ph-speaker-high"></i> Clique no canal "<strong>${viewingChannel}</strong>" na barra lateral para entrar.`;
-                    strip.appendChild(div);
-                    return;
-                }
+                if (!myVoiceChannel || viewingChannel !== myVoiceChannel) return;
 
                 const users = (window._users || []).filter(u => u.voiceChannel === myVoiceChannel);
                 users.forEach(u => {
@@ -1274,11 +1351,11 @@
 
                     chip.innerHTML = `
                         ${avatarHtml(u, 'w-6 h-6', isMe)}
-                        <span class="text-xs text-zinc-300 truncate max-w-[100px]">${u.name}${isMe ? ' (Você)' : ''}</span>
+                        <span class="text-xs text-zinc-300 truncate max-w-[100px]">${escapeHtml(u.name)}${isMe ? ' (Você)' : ''}</span>
                         ${watchBtn}
                     `;
                     if (!isMe) {
-                        chip.title = 'Clique com o botão direito para ajustar o volume';
+                        chip.title = 'Clique com o botão direito para ajustar volume ou expulsar';
                         attachVolumeContextMenu(chip, u.id, u.name);
                     }
                     strip.appendChild(chip);
@@ -1296,7 +1373,7 @@
                 div.innerHTML = `
                     <div class="cm-avatar ${colorForUser(msg.userId)}">${initial}</div>
                     <div class="min-w-0">
-                        <div class="cm-header"><span class="cm-name">${msg.userName}</span><span class="cm-time">${time}</span></div>
+                        <div class="cm-header"><span class="cm-name">${escapeHtml(msg.userName)}</span><span class="cm-time">${time}</span></div>
                         <div class="cm-text"></div>
                     </div>
                 `;
@@ -1349,6 +1426,7 @@
                 videoGrid.style.display = n === 0 ? 'none' : 'grid';
                 const cols = n <= 1 ? 1 : (n <= 4 ? 2 : Math.ceil(Math.sqrt(n)));
                 videoGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                renderVoiceStagePlaceholder();
             }
 
             function toggleTileFullscreen(el) {
@@ -1370,7 +1448,7 @@
                     <video autoplay playsinline></video>
                     <div class="video-label">
                         <span class="live-dot-green tile-dot"></span>
-                        <span class="tile-name">${label || getUserName(userId)}</span>
+                        <span class="tile-name">${escapeHtml(label || getUserName(userId))}</span>
                     </div>
                     <button class="tile-fullscreen" title="Tela cheia"><i class="ph ph-corners-out"></i></button>
                     <button class="tile-remove" title="Parar de assistir"><i class="ph ph-x"></i></button>
@@ -1517,16 +1595,21 @@
                     container.innerHTML = '<div class="text-sm text-zinc-500 text-center py-2">Nenhuma sala ativa no momento.</div>';
                     return;
                 }
-                rooms.forEach(roomName => {
+                rooms.forEach(({ name: roomName, hasPassword }) => {
                     const div = document.createElement('div');
                     div.className = 'flex items-center justify-between p-2 bg-zinc-800/40 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 transition-colors';
                     div.innerHTML = `
-                        <span class="text-sm text-zinc-300"><i class="ph ph-door"></i> ${roomName}</span>
+                        <span class="text-sm text-zinc-300"><i class="ph ${hasPassword ? 'ph-lock-simple' : 'ph-door'}"></i> ${escapeHtml(roomName)}</span>
                         <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">Entrar</span>
                     `;
                     div.addEventListener('click', () => {
                         inputNewRoom.value = roomName;
-                        btnCreateRoom.click();
+                        if (hasPassword) {
+                            document.getElementById('input-room-password').value = '';
+                            document.getElementById('input-room-password').focus();
+                        } else {
+                            btnCreateRoom.click();
+                        }
                     });
                     container.appendChild(div);
                 });
@@ -1848,6 +1931,7 @@
                 discoveryStatus.innerHTML = `<i class="ph ph-check-circle"></i> Conectado ao servidor!`;
                 discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
                 inputNewRoom.disabled = false;
+                document.getElementById('input-room-password').disabled = false;
                 btnCreateRoom.disabled = false;
                 document.getElementById('btn-quick-join').disabled = false;
                 showToast('Conectado', 'Servidor conectado.');
@@ -1860,11 +1944,30 @@
                 showToast('Erro', 'Não foi possível conectar ao servidor.', 'error');
             });
 
+            socket.on('kicked', ({ by }) => {
+                returnToLobby('Expulso', by ? `Você foi expulso da sala por ${by}.` : 'Você foi expulso da sala.');
+            });
+
+            socket.on('owner-token', ({ roomId, token }) => {
+                localStorage.setItem('ssp-owner-token-' + roomId, token);
+            });
+
+            socket.on('join-error', ({ reason }) => {
+                const attemptedRoom = currentRoom;
+                const msg = reason === 'wrong-password' ? 'Senha incorreta pra essa sala.' : 'Não foi possível entrar na sala.';
+                returnToLobby('Erro', msg);
+                showFullRoomPicker();
+                inputNewRoom.value = attemptedRoom || '';
+                document.getElementById('input-room-password').value = '';
+                document.getElementById('input-room-password').focus();
+            });
+
             socket.on('rooms-list', renderRoomList);
             socket.on('rooms-update', renderRoomList);
 
             socket.on('update-user-list', (users) => {
                 window._users = users;
+                amIOwner = !!users.find(u => u.id === socket.id)?.isOwner;
 
                 // Se alguém que eu assistia parou de transmitir ou saiu, removo a tela dele
                 const liveIds = new Set(users.filter(u => u.isStreaming).map(u => u.id));
@@ -1913,7 +2016,7 @@
 
                     let channelBadge = '';
                     if (u.voiceChannel) {
-                        channelBadge = `<span class="text-[10px] text-emerald-400 flex items-center gap-1 flex-shrink-0"><i class="ph ph-speaker-high"></i> ${u.voiceChannel}</span>`;
+                        channelBadge = `<span class="text-[10px] text-emerald-400 flex items-center gap-1 flex-shrink-0"><i class="ph ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}</span>`;
                     }
 
                     let actionHtml = '';
@@ -1930,13 +2033,13 @@
 
                     div.innerHTML = `
                         ${avatarHtml(u, 'w-8 h-8', isMe)}
-                        <span class="text-sm text-zinc-300 truncate flex-1" id="${isMe ? 'own-name-label' : ''}">${u.name} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
+                        <span class="text-sm text-zinc-300 truncate flex-1" id="${isMe ? 'own-name-label' : ''}">${escapeHtml(u.name)} ${isMe ? '<span class="text-zinc-500 text-xs">(Você)</span>' : ''}</span>
                         ${channelBadge}
                         ${actionHtml}
                     `;
 
                     if (!isMe) {
-                        div.title = 'Clique com o botão direito para ajustar o volume dessa pessoa';
+                        div.title = 'Clique com o botão direito para ajustar volume ou expulsar';
                         attachVolumeContextMenu(div, u.id, u.name);
                     }
 
@@ -2039,20 +2142,11 @@
             // ==========================================
             // ENTRAR NA SALA
             // ==========================================
-            function joinRoom(roomName) {
-                roomName = (roomName || '').trim();
-                const myUsername = inputUsername.value.trim() || 'Participante';
-                if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
-
-                localStorage.setItem('ssp-username', myUsername);
-                localStorage.setItem('ssp-last-room', roomName);
-                document.getElementById('connection-modal').classList.add('hidden');
-                currentRoom = roomName;
-                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
-                statusText.textContent = currentRoom;
-                showToast('Conectado', `Sala: ${currentRoom}`);
-
-                // Limpa qualquer estado de uma sala anterior
+            // Limpa qualquer estado de sala (conexões, canais, chat) — usado tanto
+            // antes de entrar numa sala nova quanto ao ser expulso/voltar pro lobby.
+            function teardownRoomState() {
+                amIOwner = false;
+                if (isSharing) stopScreenShare();
                 Object.values(viewerPeers).forEach(pc => pc.close());
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
@@ -2070,8 +2164,43 @@
                 viewingChannel = null;
                 Object.keys(chatHistories).forEach(k => delete chatHistories[k]);
                 setControlsEnabled(false);
+            }
 
-                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar });
+            function joinRoom(roomName, passwordOverride) {
+                roomName = (roomName || '').trim();
+                const myUsername = inputUsername.value.trim() || 'Participante';
+                if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
+
+                const password = passwordOverride !== undefined
+                    ? passwordOverride
+                    : (document.getElementById('input-room-password').value || '');
+
+                localStorage.setItem('ssp-username', myUsername);
+                localStorage.setItem('ssp-last-room', roomName);
+                if (password) localStorage.setItem('ssp-room-password-' + roomName, password);
+                else localStorage.removeItem('ssp-room-password-' + roomName);
+
+                document.getElementById('connection-modal').classList.add('hidden');
+                currentRoom = roomName;
+                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
+                statusText.textContent = currentRoom;
+                showToast('Conectado', `Sala: ${currentRoom}`);
+
+                teardownRoomState();
+
+                const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
+                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken });
+            }
+
+            // Volta pra tela de login (usado quando o servidor manda 'kicked')
+            function returnToLobby(toastTitle, toastMsg) {
+                teardownRoomState();
+                currentRoom = null;
+                statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
+                statusText.textContent = '';
+                document.getElementById('connection-modal').classList.remove('hidden');
+                if (localStorage.getItem('ssp-last-room')) showQuickJoin(); else showFullRoomPicker();
+                if (toastTitle) showToast(toastTitle, toastMsg, 'error');
             }
 
             btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
@@ -2098,7 +2227,7 @@
 
             if (lastRoom) showQuickJoin(); else showFullRoomPicker();
 
-            btnQuickJoin.addEventListener('click', () => joinRoom(lastRoom));
+            btnQuickJoin.addEventListener('click', () => joinRoom(lastRoom, localStorage.getItem('ssp-room-password-' + lastRoom) || ''));
             btnSwitchRoom.addEventListener('click', showFullRoomPicker);
             inputUsername.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && lastRoom && !quickJoinSection.classList.contains('hidden')) {
@@ -2288,12 +2417,8 @@
             }
 
             document.getElementById('btn-leave').addEventListener('click', () => {
-                if (isSharing) stopScreenShare();
-                if (window.electronAPI && window.electronAPI.closeApp) {
-                    window.electronAPI.closeApp();
-                } else {
-                    window.close();
-                }
+                if (!myVoiceChannel) return;
+                leaveVoiceChannel();
             });
 
         });
