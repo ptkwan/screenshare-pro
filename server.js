@@ -181,7 +181,14 @@ function sanitizeAvatar(raw) {
 // legitimamente mais pesada que uma foto de perfil pequena. O cliente já
 // redimensiona/comprime antes de mandar; isso aqui é só o limite de
 // segurança pro servidor não aceitar payload absurdo de qualquer socket.
-const MAX_CHAT_IMAGE_LENGTH = 1_500_000; // ~1.1MB decodificado
+// Precisa ficar ABAIXO do maxHttpBufferSize do socket.io (1_000_000 bytes --
+// não configuramos isso explicitamente aqui, é o padrão da própria lib) --
+// um valor maior que isso nunca seria alcançado por essa validação, porque o
+// pacote já seria rejeitado na camada de transporte antes de chegar aqui (de
+// um jeito menos controlado: o socket.io descarta o pacote, e dependendo do
+// caso pode até derrubar a conexão). O restante do payload (canal, texto,
+// framing do socket.io) também ocupa espaço nesse teto, daí a margem.
+const MAX_CHAT_IMAGE_LENGTH = 700_000; // ~520KB decodificado, com folga sob o 1MB do transporte
 
 function sanitizeChatImage(raw) {
   if (typeof raw !== 'string' || !raw) return null;
