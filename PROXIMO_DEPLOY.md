@@ -217,7 +217,7 @@ em `BUGS.md` (2026-09-02).
 
 ---
 
-## [ ] 7. Supressão de ruído tipo Krisp (RNNoise)
+## [x] 7. Supressão de ruído tipo Krisp (RNNoise) (CORRIGIDO E DEPLOYADO — v1.13.0)
 
 Pedido do Patrick: o Discord tem o Krisp pra cortar ruído de fundo, dá pra
 ter algo parecido?
@@ -233,6 +233,11 @@ existe pra áudio nativo (`setupNativeAudioPlumbing`), processando o áudio
 do microfone antes de mandar pro chat de voz. Não é trivial (precisa achar/
 empacotar o build WASM do RNNoise e encaixar no worklet), então vale
 avaliar o esforço antes de entrar na fila.
+
+**Feito**: RNNoise integrado de verdade — `vendor/rnnoise/` (build WASM +
+worklet) carregado no `index.html`, com `RnnoiseWorkletNode`/`loadRnnoise`
+processando o microfone antes de mandar pro chat de voz. Commitado e
+deployado junto com a v1.13.0 (rebrand pra Streama AI).
 
 ---
 
