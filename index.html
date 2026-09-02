@@ -1828,6 +1828,10 @@
                     });
                 }
 
+                pc.oniceconnectionstatechange = () => {
+                    reportLog('info', `ICE (transmitindo pra ${getUserName(viewerId)}): ${pc.iceConnectionState}`);
+                };
+
                 return pc;
             }
 
@@ -1865,6 +1869,13 @@
                     if (streamReceived) return;
                     streamReceived = true;
                     attachStreamToTile(streamerId, e.streams[0]);
+                };
+
+                // Reporta o estado da conexão ICE pro log do servidor -- se o
+                // vídeo fica preto (ninguém sabia dizer se era falha de rede ou
+                // outra coisa), isso mostra sem precisar abrir o DevTools.
+                pc.oniceconnectionstatechange = () => {
+                    reportLog('info', `ICE (assistindo ${getUserName(streamerId)}): ${pc.iceConnectionState}`);
                 };
 
                 pc.addTransceiver('video', { direction: 'recvonly' });
