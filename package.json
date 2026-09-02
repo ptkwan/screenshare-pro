@@ -1,6 +1,6 @@
 {
   "name": "screenshare-pro",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "App de compartilhamento de tela em rede local",
   "main": "main.js",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.seu-nome.screensharepro",
-    "productName": "Discord do BOA",
+    "productName": "Roshan",
     "asarUnpack": [
       "node_modules/loopback-capture/**/*",
       "native/**/*"
