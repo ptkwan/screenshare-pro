@@ -1310,6 +1310,42 @@
                 }
             }
 
+            // ==========================================
+            // TOQUES DE ENTRAR/SAIR DA CHAMADA (tipo Discord) -- gerados na hora
+            // via Web Audio, sem depender de nenhum arquivo de áudio. Tocam só
+            // pro seu próprio ouvido (ligado direto em ctx.destination, nunca no
+            // grafo de envio do WebRTC) -- ninguém mais escuta.
+            // ==========================================
+            let sfxAudioCtx = null;
+            function playBlip(freqFrom, freqTo, duration = 0.14) {
+                if (isMuted || masterVolume <= 0) return; // respeita o mudo/volume geral
+                try {
+                    if (!sfxAudioCtx) sfxAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const ctx = sfxAudioCtx;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freqFrom, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(freqTo, ctx.currentTime + duration);
+                    const peak = 0.16 * masterVolume;
+                    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(peak, ctx.currentTime + 0.012);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + duration + 0.03);
+                } catch (e) { /* som é só um extra -- nunca pode quebrar nada */ }
+            }
+            function playJoinTone() { playBlip(440, 880); }
+            function playLeaveTone() { playBlip(660, 330); }
+
+            // Quem estava no MEU canal de voz na última atualização -- usado só
+            // pra detectar quem entrou/saiu e tocar o som certo. Resetado toda
+            // vez que EU troco de canal, pra não tocar um monte de sons de
+            // "entrada" pra quem já estava lá quando eu cheguei.
+            let prevVoiceChannelMemberIds = new Set();
+
             async function joinVoiceChannel(channel) {
                 if (myVoiceChannel === channel) {
                     // já conectado, só troca o que está sendo visualizado
@@ -1332,6 +1368,12 @@
                 viewingType = 'voice';
                 viewingChannel = channel;
                 connectingMic = true;
+                // Marca quem já tava na sala como "conhecido" -- senão a primeira
+                // atualização depois de entrar tocaria um som de entrada pra cada
+                // pessoa que já estava lá antes de mim.
+                prevVoiceChannelMemberIds = new Set(
+                    (window._users || []).filter(u => u.voiceChannel === channel && u.id !== socket.id).map(u => u.id)
+                );
 
                 // Troca a tela JÁ (header, painel de voz) antes de esperar o
                 // microfone -- antes disso a tela ficava parada por até ~1s+ (mais
@@ -1371,6 +1413,7 @@
 
                 socket.emit('leave-voice-channel');
                 myVoiceChannel = null;
+                prevVoiceChannelMemberIds = new Set();
                 setControlsEnabled(false);
 
                 renderChannelSidebar();
@@ -2396,6 +2439,14 @@
                     const inMyChannel = new Set(
                         users.filter(u => u.voiceChannel === myVoiceChannel && u.id !== socket.id).map(u => u.id)
                     );
+
+                    // Toque de entrada/saída: alguém apareceu ou sumiu do MEU canal.
+                    const someoneJoined = [...inMyChannel].some(id => !prevVoiceChannelMemberIds.has(id));
+                    const someoneLeft = [...prevVoiceChannelMemberIds].some(id => !inMyChannel.has(id));
+                    if (someoneJoined) playJoinTone();
+                    if (someoneLeft) playLeaveTone();
+                    prevVoiceChannelMemberIds = inMyChannel;
+
                     users.forEach(u => {
                         if (u.id === socket.id || u.voiceChannel !== myVoiceChannel) return;
                         if (voicePeers[u.id]) return;

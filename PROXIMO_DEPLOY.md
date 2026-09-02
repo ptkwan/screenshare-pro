@@ -8,6 +8,28 @@ Status: `[ ]` pendente · `[~]` investigando · `[x]` corrigido (mas ainda não 
 
 ---
 
+## [x] 10. Toques de entrar/sair da chamada de voz (CORRIGIDO, não deployado ainda)
+
+Pedido do Patrick: som quando alguém entra e outro quando sai da chamada,
+tipo Discord.
+
+Gerado na hora via Web Audio (osciladores simples, um "blip" subindo pra
+entrada e um descendo pra saída) — sem depender de nenhum arquivo de áudio
+externo. Toca só localmente (ligado direto em `ctx.destination`, nunca no
+grafo de envio do WebRTC), então ninguém mais ouve. Respeita o mudo geral
+(`btn-volume`) e o volume configurado.
+
+Detecta quem entrou/saiu comparando a lista de membros do MEU canal de voz
+a cada atualização do servidor (não precisou de nenhum evento novo). Não
+toca som pros membros que já estavam lá quando eu entrei, nem quando eu
+mesmo troco de canal.
+
+**Testado** com dois clientes: som de entrada dispara exatamente 1 vez
+quando o segundo entra na mesma sala de voz, som de saída dispara quando
+ele sai, e trocar de canal sozinho não dispara nenhum som falso.
+
+---
+
 ## [x] 9. Trocar de servidor tipo Discord + ícones de sala (CORRIGIDO, não deployado ainda)
 
 Pedido do Patrick com prints comparando com o Discord. Três coisas juntas:
