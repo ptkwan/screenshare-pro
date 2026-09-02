@@ -211,21 +211,6 @@
                     <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
                 </div>
                 <input type="password" id="input-room-password" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm mt-2 focus:outline-none focus:border-blue-500" placeholder="Senha (opcional, só se quiser proteger a sala)" disabled>
-                <label class="flex items-center gap-2 mt-2 text-xs text-zinc-400 select-none cursor-pointer">
-                    <input type="checkbox" id="input-room-hidden" class="rounded border-zinc-700 bg-zinc-950" disabled>
-                    <i class="ph ph-eye-slash"></i> Sala oculta (não aparece pra ninguém na lista pública -- só entra quem tiver o código)
-                </label>
-            </div>
-
-            <!-- ENTRAR EM SALA OCULTA: campo separado de propósito -- não pede
-                 nome de sala nenhum, só o código. É o código que diz qual sala é. -->
-            <div id="hidden-room-section" class="border-t border-zinc-800 pt-4 mt-4">
-                <h3 class="text-sm font-semibold text-zinc-400 mb-2 flex items-center gap-1"><i class="ph ph-eye-slash"></i> Sala oculta? Entrar com código</h3>
-                <form id="join-by-code-form" class="flex gap-2">
-                    <input type="text" id="input-hidden-code" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Código secreto" disabled>
-                    <button type="submit" id="btn-join-by-code" class="bg-zinc-700 hover:bg-zinc-600 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar</button>
-                </form>
-                <p id="hidden-code-error" class="hidden text-xs text-red-400 flex items-center gap-1 mt-2"><i class="ph ph-warning-circle"></i></p>
             </div>
         </div>
     </div>
@@ -244,27 +229,6 @@
                     <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors">Entrar</button>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <!-- MODAL: aguardando aprovação do dono da sala (visto por quem tá entrando) -->
-    <div id="join-pending-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4 items-center text-center">
-            <i class="ph ph-hourglass-medium text-4xl text-blue-500 animate-pulse"></i>
-            <h2 class="text-xl font-bold">Aguardando aprovação</h2>
-            <p class="text-sm text-zinc-400">O dono da sala precisa aprovar sua entrada antes de você continuar. Isso só acontece na primeira vez que você entra nessa sala.</p>
-            <button id="btn-cancel-join-request" type="button" class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium px-4 py-2 rounded-lg transition-colors">Cancelar</button>
-        </div>
-    </div>
-
-    <!-- MODAL: fila de aprovação (visto pelo dono da sala) -->
-    <div id="pending-approvals-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-user-plus text-blue-500"></i> Aprovar entrada</h2>
-                <button id="btn-close-pending-approvals-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
-            </div>
-            <div id="pending-approvals-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto"></div>
         </div>
     </div>
 
@@ -330,9 +294,6 @@
             <div id="channel-header" class="flex items-center gap-2 text-zinc-200 text-sm font-semibold min-w-0"></div>
         </div>
         <div class="flex items-center gap-4 text-sm text-zinc-400 flex-shrink-0">
-            <button id="btn-pending-approvals" class="hidden relative flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors text-xs font-medium" title="Aprovar quem tá esperando pra entrar">
-                <i class="ph ph-user-plus"></i> Aprovações <span id="pending-approvals-badge" class="bg-white/20 rounded-full px-1.5">0</span>
-            </button>
             <div id="connection-status" class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1.5">
                 <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
                 <span id="status-text">Desconectado</span>
@@ -542,17 +503,9 @@
             inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
             let myAvatar = localStorage.getItem('ssp-avatar') || null;
             let amIOwner = false; // sou o dono da sala atual? (só o dono pode expulsar/renomear)
-            let hasEnteredRoom = false; // já passei pela aprovação/entrada dessa conexão? evita repetir a transição de UI a cada channels-info (ex: depois de renomear um canal)
-            let pendingApprovals = []; // [{ userId, username, avatar }] -- só populado se eu for dono
+            let hasEnteredRoom = false; // já passei pela entrada dessa conexão? evita repetir a transição de UI a cada channels-info (ex: depois de renomear um canal)
             const btnCreateRoom = document.getElementById('btn-create-room');
-            const inputRoomHidden = document.getElementById('input-room-hidden');
             const inputRoomPassword = document.getElementById('input-room-password');
-            const inputHiddenCode = document.getElementById('input-hidden-code');
-            inputRoomHidden.addEventListener('change', () => {
-                inputRoomPassword.placeholder = inputRoomHidden.checked
-                    ? 'Código secreto (obrigatório pra sala oculta)'
-                    : 'Senha (opcional, só se quiser proteger a sala)';
-            });
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
 
@@ -2535,9 +2488,6 @@
                 discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
                 inputNewRoom.disabled = false;
                 inputRoomPassword.disabled = false;
-                inputRoomHidden.disabled = false;
-                inputHiddenCode.disabled = false;
-                document.getElementById('btn-join-by-code').disabled = false;
                 btnCreateRoom.disabled = false;
                 showToast('Conectado', 'Servidor conectado.');
                 socket.emit('get-rooms');
@@ -2576,9 +2526,7 @@
                     ? 'Senha incorreta pra essa sala.'
                     : reason === 'too-many-attempts'
                         ? 'Muitas tentativas erradas de senha. Espera 1 minuto e tenta de novo.'
-                        : reason === 'hidden-room-requires-code'
-                            ? 'Sala oculta precisa de um código secreto -- preenche o campo de senha com o código antes de criar.'
-                            : 'Não foi possível entrar na sala.';
+                        : 'Não foi possível entrar na sala.';
                 returnToLobby(reason === 'wrong-password' ? null : 'Erro', reason === 'wrong-password' ? null : msg);
                 showFullRoomPicker();
                 inputNewRoom.value = attemptedRoom || '';
@@ -2589,97 +2537,9 @@
                 }
             });
 
-            // Sala oculta encontrada pelo código (ou criada agora) -- o servidor
-            // manda o nome real dela porque quem entrou por código nunca soube
-            // esse nome de antemão.
             socket.on('room-joined', ({ roomId }) => {
                 currentRoom = roomId;
                 localStorage.setItem('ssp-last-room', roomId);
-            });
-
-            socket.on('join-by-code-error', ({ reason }) => {
-                const msg = reason === 'too-many-attempts'
-                    ? 'Muitas tentativas de código errado. Espera 1 minuto e tenta de novo.'
-                    : reason === 'invalid-code'
-                        ? 'Digite um código.'
-                        : 'Código inválido -- nenhuma sala oculta encontrada.';
-                currentRoom = null;
-                const errorEl = document.getElementById('hidden-code-error');
-                errorEl.textContent = msg;
-                errorEl.classList.remove('hidden');
-                showFullRoomPicker();
-            });
-
-            // ==========================================
-            // APROVAÇÃO DE ENTRADA — quem entra numa sala já existente (e não é o
-            // dono) fica esperando aqui até o dono aprovar ou recusar.
-            // ==========================================
-            socket.on('join-pending', () => {
-                document.getElementById('join-pending-modal').classList.remove('hidden');
-                document.getElementById('join-pending-modal').classList.add('flex');
-            });
-
-            function hideJoinPendingModal() {
-                document.getElementById('join-pending-modal').classList.add('hidden');
-                document.getElementById('join-pending-modal').classList.remove('flex');
-            }
-
-            socket.on('join-rejected', ({ by }) => {
-                hideJoinPendingModal();
-                returnToLobby('Não aprovado', `${by || 'O dono da sala'} recusou sua entrada nessa sala.`);
-            });
-
-            document.getElementById('btn-cancel-join-request').addEventListener('click', () => {
-                socket.emit('cancel-join-request');
-                hideJoinPendingModal();
-                returnToLobby();
-            });
-
-            // Lado do dono: lista de quem tá esperando aprovação na sala atual.
-            socket.on('pending-joins-update', (list) => {
-                pendingApprovals = list || [];
-                updatePendingApprovalsUI();
-            });
-
-            function updatePendingApprovalsUI() {
-                const btn = document.getElementById('btn-pending-approvals');
-                const badge = document.getElementById('pending-approvals-badge');
-                const show = amIOwner && pendingApprovals.length > 0;
-                btn.classList.toggle('hidden', !show);
-                badge.textContent = pendingApprovals.length;
-                renderPendingApprovalsList();
-            }
-
-            function renderPendingApprovalsList() {
-                const container = document.getElementById('pending-approvals-list');
-                container.innerHTML = '';
-                if (pendingApprovals.length === 0) {
-                    container.innerHTML = '<p class="text-sm text-zinc-500 text-center py-4">Ninguém esperando aprovação.</p>';
-                    return;
-                }
-                pendingApprovals.forEach(p => {
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-3 p-2 rounded-lg border border-zinc-700/50 bg-zinc-800/40';
-                    div.innerHTML = `
-                        ${avatarHtml({ id: p.userId, name: p.username, avatar: p.avatar }, 'w-8 h-8', false)}
-                        <span class="text-sm text-zinc-300 truncate flex-1">${escapeHtml(p.username)}</span>
-                        <button class="text-emerald-400 hover:text-emerald-300 flex-shrink-0" title="Aprovar" onclick="window.approveJoin('${p.userId}')"><i class="ph ph-check-circle text-lg"></i></button>
-                        <button class="text-red-400 hover:text-red-300 flex-shrink-0" title="Recusar" onclick="window.rejectJoin('${p.userId}')"><i class="ph ph-x-circle text-lg"></i></button>
-                    `;
-                    container.appendChild(div);
-                });
-            }
-
-            window.approveJoin = (userId) => socket.emit('approve-join', { userId });
-            window.rejectJoin = (userId) => socket.emit('reject-join', { userId });
-
-            document.getElementById('btn-pending-approvals').addEventListener('click', () => {
-                document.getElementById('pending-approvals-modal').classList.remove('hidden');
-                document.getElementById('pending-approvals-modal').classList.add('flex');
-            });
-            document.getElementById('btn-close-pending-approvals-modal').addEventListener('click', () => {
-                document.getElementById('pending-approvals-modal').classList.add('hidden');
-                document.getElementById('pending-approvals-modal').classList.remove('flex');
             });
 
             socket.on('rooms-list', renderRoomList);
@@ -2688,7 +2548,6 @@
             socket.on('update-user-list', (users) => {
                 window._users = users;
                 amIOwner = !!users.find(u => u.id === socket.id)?.isOwner;
-                updatePendingApprovalsUI();
                 updateOwnUserBlock();
 
                 // Se alguém que eu assistia parou de transmitir ou saiu, removo a tela dele
@@ -2733,23 +2592,19 @@
             });
 
             // Confirma a entrada de verdade na sala (chega via 'channels-info', que só
-            // é emitido pelo servidor depois que o join foi aceito -- direto, ou depois
-            // de aprovado). Guardado por 'hasEnteredRoom' pra não repetir a transição
-            // (fechar modal, toast "Conectado") toda vez que channels-info chega de
-            // novo por outro motivo, tipo renomear um canal.
+            // é emitido pelo servidor depois que o join foi aceito). Guardado por
+            // 'hasEnteredRoom' pra não repetir a transição (fechar modal, toast
+            // "Conectado") toda vez que channels-info chega de novo por outro
+            // motivo, tipo renomear um canal.
             function enterRoomUI() {
                 if (hasEnteredRoom) return;
                 hasEnteredRoom = true;
-                hideJoinPendingModal();
                 document.getElementById('connection-modal').classList.add('hidden');
                 statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
                 statusText.textContent = currentRoom;
                 showToast('Conectado', `Sala: ${currentRoom}`);
                 addKnownRoom(currentRoom);
                 renderServerRail();
-                inputRoomHidden.checked = false;
-                inputHiddenCode.value = '';
-                document.getElementById('hidden-code-error').classList.add('hidden');
             }
 
             socket.on('channels-info', ({ textChannels: tc, voiceChannels: vc }) => {
@@ -2871,11 +2726,8 @@
             function teardownRoomState() {
                 amIOwner = false;
                 hasEnteredRoom = false;
-                pendingApprovals = [];
-                updatePendingApprovalsUI();
                 updateOwnUserBlock();
                 renderServerRail();
-                hideJoinPendingModal();
                 if (isSharing) stopScreenShare();
                 Object.values(viewerPeers).forEach(pc => pc.close());
                 Object.values(senderPeers).forEach(pc => pc.close());
@@ -2895,7 +2747,7 @@
                 setControlsEnabled(false);
             }
 
-            function joinRoom(roomName, passwordOverride, hidden) {
+            function joinRoom(roomName, passwordOverride) {
                 roomName = (roomName || '').trim();
                 const myUsername = inputUsername.value.trim() || 'Participante';
                 if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
@@ -2903,10 +2755,6 @@
                 const password = passwordOverride !== undefined
                     ? passwordOverride
                     : (inputRoomPassword.value || '');
-
-                if (hidden && !password) {
-                    return showToast('Atenção', 'Sala oculta precisa de um código secreto -- preenche o campo de senha com o código.', 'error');
-                }
 
                 localStorage.setItem('ssp-username', myUsername);
                 localStorage.setItem('ssp-last-room', roomName);
@@ -2923,25 +2771,7 @@
                 teardownRoomState();
 
                 const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
-                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken, hidden: !!hidden });
-            }
-
-            // Entrar numa sala oculta só pelo código -- não passa nome de sala
-            // nenhum pro servidor, só o código; é o servidor que descobre (e
-            // revela pro cliente, via 'room-joined') qual sala é essa.
-            function joinRoomByCode(code) {
-                code = (code || '').trim();
-                if (!code) return showToast('Atenção', 'Digite o código da sala oculta', 'error');
-                const myUsername = inputUsername.value.trim() || 'Participante';
-
-                localStorage.setItem('ssp-username', myUsername);
-
-                if (currentRoom) socket.emit('leave-room');
-                currentRoom = null; // só sabemos qual sala é quando 'room-joined' chegar
-                teardownRoomState();
-
-                document.getElementById('hidden-code-error').classList.add('hidden');
-                socket.emit('join-by-code', { code, username: myUsername, avatar: myAvatar });
+                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken });
             }
 
             // Modal dedicado pra pedir senha de sala protegida -- bem mais
@@ -2986,12 +2816,7 @@
                 if (toastTitle) showToast(toastTitle, toastMsg, 'error');
             }
 
-            btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value, undefined, inputRoomHidden.checked));
-
-            document.getElementById('join-by-code-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                joinRoomByCode(inputHiddenCode.value);
-            });
+            btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
 
             // ==========================================
             // ESCOLHA DE SALA: sempre passa pela lista de salas ativas (não pula
