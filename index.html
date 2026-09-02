@@ -180,8 +180,25 @@
                     <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
                     <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
                 </div>
-                <input type="password" id="input-room-password" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm mt-2 focus:outline-none focus:border-blue-500" placeholder="Senha da sala (opcional pra criar, obrigatória se a sala já tiver uma)" disabled>
+                <input type="password" id="input-room-password" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm mt-2 focus:outline-none focus:border-blue-500" placeholder="Senha (opcional, só se quiser proteger a sala)" disabled>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL DEDICADO: pedir a senha de uma sala protegida (bem mais visível
+         que só um campo dentro do formulário de criar sala) -->
+    <div id="room-password-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
+            <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-lock-simple text-amber-500"></i> Sala protegida por senha</h2>
+            <p class="text-sm text-zinc-400">A sala "<strong id="room-password-modal-name"></strong>" pede uma senha pra entrar.</p>
+            <form id="room-password-form" class="flex flex-col gap-3">
+                <input type="password" id="room-password-modal-input" autofocus class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite a senha">
+                <p id="room-password-modal-error" class="hidden text-xs text-red-400 flex items-center gap-1"><i class="ph ph-warning-circle"></i> Senha incorreta, tenta de novo.</p>
+                <div class="flex gap-2">
+                    <button type="button" id="btn-room-password-cancel" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors">Entrar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1112,7 +1129,10 @@
                 }
             });
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') closeRenamePopup();
+                if (e.key === 'Escape') {
+                    closeRenamePopup();
+                    closeRoomPasswordPrompt();
+                }
             });
 
             window.startEditOwnName = function (e) {
@@ -1620,8 +1640,7 @@
                     div.addEventListener('click', () => {
                         inputNewRoom.value = roomName;
                         if (hasPassword) {
-                            document.getElementById('input-room-password').value = '';
-                            document.getElementById('input-room-password').focus();
+                            openRoomPasswordPrompt(roomName);
                         } else {
                             btnCreateRoom.click();
                         }
@@ -1993,12 +2012,19 @@
 
             socket.on('join-error', ({ reason }) => {
                 const attemptedRoom = currentRoom;
-                const msg = reason === 'wrong-password' ? 'Senha incorreta pra essa sala.' : 'Não foi possível entrar na sala.';
-                returnToLobby('Erro', msg);
+                const msg = reason === 'wrong-password'
+                    ? 'Senha incorreta pra essa sala.'
+                    : reason === 'too-many-attempts'
+                        ? 'Muitas tentativas erradas de senha. Espera 1 minuto e tenta de novo.'
+                        : 'Não foi possível entrar na sala.';
+                returnToLobby(reason === 'wrong-password' ? null : 'Erro', reason === 'wrong-password' ? null : msg);
                 showFullRoomPicker();
                 inputNewRoom.value = attemptedRoom || '';
-                document.getElementById('input-room-password').value = '';
-                document.getElementById('input-room-password').focus();
+                if (reason === 'wrong-password') {
+                    openRoomPasswordPrompt(attemptedRoom, msg);
+                } else if (reason === 'too-many-attempts') {
+                    openRoomPasswordPrompt(attemptedRoom);
+                }
             });
 
             socket.on('rooms-list', renderRoomList);
@@ -2230,6 +2256,37 @@
                 const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
                 socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken });
             }
+
+            // Modal dedicado pra pedir senha de sala protegida -- bem mais
+            // visível que só um campo dentro do formulário de criar sala
+            // (era fácil de não perceber que existia).
+            function openRoomPasswordPrompt(roomName, errorMsg) {
+                document.getElementById('room-password-modal-name').textContent = roomName;
+                const input = document.getElementById('room-password-modal-input');
+                input.value = '';
+                const errorEl = document.getElementById('room-password-modal-error');
+                if (errorMsg) {
+                    errorEl.textContent = errorMsg;
+                    errorEl.classList.remove('hidden');
+                } else {
+                    errorEl.classList.add('hidden');
+                }
+                document.getElementById('room-password-modal').classList.remove('hidden');
+                document.getElementById('room-password-modal').classList.add('flex');
+                setTimeout(() => input.focus(), 0);
+            }
+            function closeRoomPasswordPrompt() {
+                document.getElementById('room-password-modal').classList.add('hidden');
+                document.getElementById('room-password-modal').classList.remove('flex');
+            }
+            document.getElementById('btn-room-password-cancel').addEventListener('click', closeRoomPasswordPrompt);
+            document.getElementById('room-password-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const pw = document.getElementById('room-password-modal-input').value;
+                const roomName = document.getElementById('room-password-modal-name').textContent;
+                closeRoomPasswordPrompt();
+                joinRoom(roomName, pw);
+            });
 
             // Volta pra tela de login (usado quando o servidor manda 'kicked')
             function returnToLobby(toastTitle, toastMsg) {

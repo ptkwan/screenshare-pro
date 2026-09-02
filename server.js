@@ -36,6 +36,41 @@ function hashPassword(pw) {
   return crypto.createHash('sha256').update((pw || '').toString()).digest('hex');
 }
 
+// Compara hashes em tempo constante -- comparar string com "!==" direto
+// vazaria informação por quanto tempo a comparação leva (timing attack),
+// dando pra descobrir a senha certa byte a byte medindo a resposta.
+function passwordMatches(candidate, storedHash) {
+  const candidateHash = Buffer.from(hashPassword(candidate), 'hex');
+  const stored = Buffer.from(storedHash, 'hex');
+  return candidateHash.length === stored.length && crypto.timingSafeEqual(candidateHash, stored);
+}
+
+// Limite de tentativas de senha por IP+sala -- sem isso, dava pra tentar
+// senha atrás de senha sem parar (força bruta) já que não tem captcha nem
+// conta de usuário nenhuma travando isso.
+const PASSWORD_MAX_ATTEMPTS = 5;
+const PASSWORD_LOCKOUT_MS = 60_000;
+const passwordAttempts = new Map(); // "ip|sala" -> { count, lockedUntil }
+
+function isLockedOut(key) {
+  const entry = passwordAttempts.get(key);
+  return !!entry && entry.lockedUntil > Date.now();
+}
+
+function registerFailedAttempt(key) {
+  const entry = passwordAttempts.get(key) || { count: 0, lockedUntil: 0 };
+  entry.count += 1;
+  if (entry.count >= PASSWORD_MAX_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + PASSWORD_LOCKOUT_MS;
+    entry.count = 0;
+  }
+  passwordAttempts.set(key, entry);
+}
+
+function clearAttempts(key) {
+  passwordAttempts.delete(key);
+}
+
 function ensureRoomStructures(roomId) {
   if (!roomChannels.has(roomId)) {
     roomChannels.set(roomId, { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
@@ -124,13 +159,21 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', ({ roomId, username, avatar, password, ownerToken }) => {
     const isNewRoom = !rooms.has(roomId);
+    const attemptKey = `${socket.handshake.address}|${roomId}`;
 
     if (!isNewRoom && roomPasswords.has(roomId)) {
-      if (hashPassword(password) !== roomPasswords.get(roomId)) {
+      if (isLockedOut(attemptKey)) {
+        console.log(`[join] ${socket.id} bloqueado por excesso de tentativas de senha na sala "${roomId}"`);
+        socket.emit('join-error', { reason: 'too-many-attempts' });
+        return;
+      }
+      if (!passwordMatches(password, roomPasswords.get(roomId))) {
+        registerFailedAttempt(attemptKey);
         console.log(`[join] ${socket.id} (${username}) errou a senha da sala "${roomId}"`);
         socket.emit('join-error', { reason: 'wrong-password' });
         return;
       }
+      clearAttempts(attemptKey);
     }
 
     if (isNewRoom) {
@@ -405,6 +448,9 @@ io.on('connection', (socket) => {
           roomMessages.delete(room);
           roomPasswords.delete(room);
           roomOwnerTokens.delete(room);
+          Array.from(passwordAttempts.keys())
+            .filter(k => k.endsWith(`|${room}`))
+            .forEach(k => passwordAttempts.delete(k));
           io.emit('rooms-update', getRoomList());
         } else {
           broadcastUserList(room);
