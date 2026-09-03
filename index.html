@@ -282,6 +282,17 @@
         </div>
     </div>
 
+    <div id="audio-input-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-microphone text-blue-500"></i> Microfone</h2>
+                <button id="btn-close-audio-input-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <p class="text-xs text-zinc-500">Escolha qual microfone usar no chat de voz. Troca na hora, mesmo já estando numa chamada.</p>
+            <div id="audio-input-options" class="flex flex-col gap-2 max-h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
     <div id="voice-audio-container" style="display:none"></div>
 
@@ -431,6 +442,10 @@
 
             <button class="control-btn text-zinc-400" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
                 <i class="ph ph-waveform text-base"></i>
+            </button>
+
+            <button class="control-btn text-zinc-400" id="btn-audio-input" title="Escolher microfone" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
+                <i class="ph ph-microphone text-base"></i>
             </button>
 
             <button class="control-btn text-zinc-400" id="btn-toggle-participants" title="Mostrar/ocultar participantes" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
@@ -1014,6 +1029,48 @@
                 document.getElementById('audio-output-modal').classList.remove('flex');
             });
 
+            async function renderAudioInputOptions() {
+                const container = document.getElementById('audio-input-options');
+                container.innerHTML = '<div class="text-xs text-zinc-500">Carregando dispositivos...</div>';
+                try {
+                    await ensureMicStream(); // rótulos dos dispositivos só vêm preenchidos com permissão de mídia concedida
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const inputs = devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+                    container.innerHTML = '';
+
+                    const allOptions = [{ deviceId: 'default', label: 'Padrão do Sistema' }, ...inputs];
+                    allOptions.forEach(dev => {
+                        const div = document.createElement('div');
+                        div.className = 'quality-option' + (micDeviceId === dev.deviceId ? ' active-mode' : '');
+                        div.innerHTML = `
+                            <div class="flex flex-col">
+                                <span class="qo-title">${dev.label || 'Dispositivo sem nome'}</span>
+                            </div>
+                            <span class="qo-radio"></span>
+                        `;
+                        div.addEventListener('click', async () => {
+                            if (micDeviceId === dev.deviceId) return;
+                            await switchMicDevice(dev.deviceId);
+                            renderAudioInputOptions();
+                            showToast('Áudio', `Microfone trocado pra: ${dev.label || 'Padrão do Sistema'}.`);
+                        });
+                        container.appendChild(div);
+                    });
+                } catch (e) {
+                    container.innerHTML = '<div class="text-xs text-red-400">Não foi possível listar os dispositivos de áudio.</div>';
+                }
+            }
+
+            document.getElementById('btn-audio-input').addEventListener('click', () => {
+                renderAudioInputOptions();
+                document.getElementById('audio-input-modal').classList.remove('hidden');
+                document.getElementById('audio-input-modal').classList.add('flex');
+            });
+            document.getElementById('btn-close-audio-input-modal').addEventListener('click', () => {
+                document.getElementById('audio-input-modal').classList.add('hidden');
+                document.getElementById('audio-input-modal').classList.remove('flex');
+            });
+
             function applyGainForUser(peerId) {
                 const gain = gainNodes[peerId];
                 if (!gain) return;
@@ -1033,19 +1090,24 @@
                 } catch (e) { /* sem indicador de "falando" pra si mesmo, sem problema */ }
             }
 
+            let micDeviceId = localStorage.getItem('ssp-mic-device-id') || 'default';
+
+            function micConstraints() {
+                return {
+                    deviceId: micDeviceId !== 'default' ? { exact: micDeviceId } : undefined,
+                    echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+                    // Constraints extras do Chromium (ignoradas silenciosamente se a
+                    // versão não suportar) -- googTypingNoiseDetection mira
+                    // especificamente o barulho de teclado, que é a queixa mais comum.
+                    googEchoCancellation: true, googNoiseSuppression: true,
+                    googHighpassFilter: true, googTypingNoiseDetection: true,
+                };
+            }
+
             async function ensureMicStream() {
                 if (micStream) { ensureSelfSpeakingAnalyser(); return micStream; }
                 try {
-                    micStream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-                            // Constraints extras do Chromium (ignoradas silenciosamente se a
-                            // versão não suportar) -- googTypingNoiseDetection mira
-                            // especificamente o barulho de teclado, que é a queixa mais comum.
-                            googEchoCancellation: true, googNoiseSuppression: true,
-                            googHighpassFilter: true, googTypingNoiseDetection: true,
-                        }
-                    });
+                    micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
                     micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
                     ensureSelfSpeakingAnalyser();
                     return micStream;
@@ -1055,6 +1117,50 @@
                     showToast('Aviso', 'Não foi possível acessar o microfone para o chat de voz.', 'error');
                     return null;
                 }
+            }
+
+            // Troca o microfone em uso -- inclusive no MEIO de uma chamada. Refaz o
+            // pipeline de supressão de ruído do zero (ele guarda referência ao stream
+            // ANTIGO) e troca o track de saída em cada RTCPeerConnection já aberta
+            // via replaceTrack, sem precisar renegociar/reconectar (evita corte de
+            // áudio pros outros durante a troca).
+            async function switchMicDevice(deviceId) {
+                const oldStream = micStream;
+
+                micDeviceId = deviceId;
+                localStorage.setItem('ssp-mic-device-id', deviceId);
+
+                let newRaw;
+                try {
+                    newRaw = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+                } catch (err) {
+                    console.error(err);
+                    reportLog('error', `Falha ao trocar de microfone: ${err.name || err}`);
+                    showToast('Erro', 'Não foi possível usar esse microfone.', 'error');
+                    return;
+                }
+                newRaw.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+                micStream = newRaw;
+                attachSpeakingAnalyser(socket.id, getAudioCtx(), getAudioCtx().createMediaStreamSource(micStream));
+
+                // outgoingVoiceStream/denoiseCtx foram montados em cima do stream
+                // ANTIGO -- descarta e remonta do zero com o mic novo antes de
+                // repassar pros peers.
+                if (denoiseCtx) { try { denoiseCtx.close(); } catch (e) { /* ignora */ } }
+                denoiseCtx = null;
+                outgoingVoiceStream = null;
+                const newOutgoing = await ensureDenoisedMicStream();
+                const newTrack = newOutgoing ? newOutgoing.getAudioTracks()[0] : null;
+
+                if (newTrack) {
+                    Object.values(voicePeers).forEach(pc => {
+                        pc.getSenders().forEach(s => {
+                            if (s.track && s.track.kind === 'audio') s.replaceTrack(newTrack);
+                        });
+                    });
+                }
+
+                if (oldStream) oldStream.getTracks().forEach(t => t.stop());
             }
 
             // ==========================================
