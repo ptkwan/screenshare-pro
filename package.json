@@ -23,7 +23,8 @@
     "publish": {
       "provider": "github",
       "owner": "ptkwan",
-      "repo": "screenshare-pro"
+      "repo": "screenshare-pro",
+      "releaseType": "release"
     },
     "win": {
       "target": "nsis",
