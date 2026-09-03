@@ -454,6 +454,12 @@
         </form>
     </div>
 
+    <!-- TOOLTIP DA BARRA DE SERVIDORES (hover no ícone -- nome + quem tá online, tipo Discord) -->
+    <div id="server-rail-tooltip" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl px-3 py-2 pointer-events-none max-w-[220px]">
+        <div class="text-sm font-semibold text-zinc-100 truncate" id="server-rail-tooltip-name"></div>
+        <div class="text-xs text-zinc-400 mt-1 flex flex-col gap-0.5" id="server-rail-tooltip-members"></div>
+    </div>
+
     <!-- INPUT OCULTO PARA TROCAR O AVATAR (clique no seu próprio avatar) -->
     <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
     <input type="file" id="room-icon-file-input" accept="image/*" class="hidden">
@@ -2103,9 +2109,14 @@
             }
             function addKnownRoom(name) {
                 if (!name) return;
-                let list = getKnownRooms().filter(n => n !== name);
-                list.unshift(name);
-                list = list.slice(0, MAX_KNOWN_ROOMS);
+                // Ordem fixa: se a sala já é conhecida, não mexe na posição dela --
+                // só entra no fim da lista quando é realmente nova. Antes usava
+                // unshift (manda pro topo a cada entrada), o que reordenava a barra
+                // inteira toda vez que você trocava de servidor.
+                let list = getKnownRooms();
+                if (list.includes(name)) return;
+                list.push(name);
+                list = list.slice(-MAX_KNOWN_ROOMS);
                 localStorage.setItem(KNOWN_ROOMS_KEY, JSON.stringify(list));
             }
             function removeKnownRoom(name) {
@@ -2114,10 +2125,42 @@
                 renderServerRail();
             }
 
+            // Tooltip de hover na barra de servidores -- mostra nome da sala e quem
+            // tá online agora, em vez do "title" nativo do navegador (que é feio,
+            // demora pra aparecer e não mostra participantes). Um único elemento
+            // reaproveitado pra todos os ícones, igual o resto dos popups do app.
+            const serverRailTooltip = document.getElementById('server-rail-tooltip');
+            const serverRailTooltipName = document.getElementById('server-rail-tooltip-name');
+            const serverRailTooltipMembers = document.getElementById('server-rail-tooltip-members');
+            function showServerRailTooltip(anchorEl, name, meta, isOnline, isCurrent) {
+                serverRailTooltipName.textContent = name;
+                const members = meta?.members || [];
+                let membersHtml = '';
+                if (!isOnline && !isCurrent) {
+                    membersHtml = '<span>Sem ninguém agora -- entrar cria de novo</span>';
+                } else if (members.length === 0) {
+                    membersHtml = '<span>Ninguém conectado no momento</span>';
+                } else {
+                    membersHtml = `<span class="flex items-center gap-1 text-emerald-400 mb-1"><i class="ph-fill ph-circle text-[6px]"></i> ${members.length} online</span>` +
+                        members.slice(0, 8).map(m => `<div class="flex items-center gap-1.5 py-0.5">${avatarHtml({ id: m.name, name: m.name, avatar: m.avatar }, 'w-5 h-5', false)}<span class="truncate">${escapeHtml(m.name)}</span></div>`).join('') +
+                        (members.length > 8 ? `<span>+${members.length - 8} outro(s)</span>` : '');
+                }
+                serverRailTooltipMembers.innerHTML = membersHtml;
+                serverRailTooltip.classList.remove('hidden');
+                const rect = anchorEl.getBoundingClientRect();
+                serverRailTooltip.style.left = (rect.right + 12) + 'px';
+                serverRailTooltip.style.top = (rect.top + rect.height / 2) + 'px';
+                serverRailTooltip.style.transform = 'translateY(-50%)';
+            }
+            function hideServerRailTooltip() {
+                serverRailTooltip.classList.add('hidden');
+            }
+
             function renderServerRail() {
                 const railList = document.getElementById('server-rail-list');
                 if (!railList) return;
                 railList.innerHTML = '';
+                hideServerRailTooltip();
                 const known = getKnownRooms();
                 const names = currentRoom && !known.includes(currentRoom) ? [currentRoom, ...known] : known;
                 names.forEach(name => {
@@ -2130,11 +2173,12 @@
                     btn.className = 'w-11 h-11 flex-shrink-0 flex items-center justify-center transition-all duration-150 overflow-hidden ' +
                         (isCurrent ? 'rounded-2xl bg-blue-600 text-white' : 'rounded-3xl bg-zinc-800 text-zinc-300 hover:rounded-2xl hover:bg-zinc-700');
                     btn.style.opacity = isOnline || isCurrent ? '1' : '0.5';
-                    btn.title = name + (isOnline || isCurrent ? '' : ' (sem ninguém agora -- entrar cria de novo)');
                     btn.innerHTML = meta?.icon
                         ? `<img src="${meta.icon}" class="w-full h-full object-cover">`
                         : `<span class="font-bold text-sm">${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`;
                     btn.addEventListener('click', () => switchToRoom(name));
+                    btn.addEventListener('mouseenter', () => showServerRailTooltip(btn, name, meta, isOnline, isCurrent));
+                    btn.addEventListener('mouseleave', hideServerRailTooltip);
                     wrap.appendChild(btn);
                     if (isCurrent) {
                         const bar = document.createElement('div');

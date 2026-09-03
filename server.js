@@ -113,8 +113,18 @@ async function loadRoomsFromRedis() {
 }
 
 function getRoomList() {
-  return Array.from(rooms.keys())
-    .map(name => ({ name, hasPassword: roomPasswords.has(name), icon: roomIcons.get(name) || null }));
+  return Array.from(rooms.entries())
+    .map(([name, memberIds]) => ({
+      name,
+      hasPassword: roomPasswords.has(name),
+      icon: roomIcons.get(name) || null,
+      // Nome + avatar de quem tá na sala agora -- usado pro tooltip da barra
+      // de servidores conhecidos (mostrar quem tá online sem precisar entrar).
+      members: Array.from(memberIds).map(id => {
+        const s = io.sockets.sockets.get(id);
+        return { name: s?.data.username || 'Anônimo', avatar: s?.data.avatar || null };
+      }),
+    }));
 }
 
 function cleanName(raw, maxLen) {
