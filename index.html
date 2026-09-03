@@ -384,6 +384,16 @@
             </div>
         </div>
 
+        <!-- PAINEL DE PARTICIPANTES (todo mundo na sala, não só quem tá em canal de voz) -->
+        <aside id="participants-panel" class="w-60 h-full bg-zinc-950/60 border-l border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
+            <div class="h-14 border-b border-zinc-800 flex items-center gap-1 px-3 flex-shrink-0">
+                <h2 class="font-semibold text-sm text-zinc-200 flex-1 px-1">Participantes</h2>
+                <span id="participants-count" class="text-xs text-zinc-500 flex-shrink-0 mr-1"></span>
+                <button id="btn-close-participants" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Ocultar participantes"><i class="ph ph-x text-sm"></i></button>
+            </div>
+            <div id="participants-list" class="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5"></div>
+        </aside>
+
     </main>
 
     <!-- FOOTER: prioridade visual -- mic/tela/sair (principais, maiores) vs utilitários (secundários, menores) -->
@@ -421,6 +431,10 @@
 
             <button class="control-btn text-zinc-400" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
                 <i class="ph ph-waveform text-base"></i>
+            </button>
+
+            <button class="control-btn text-zinc-400" id="btn-toggle-participants" title="Mostrar/ocultar participantes" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
+                <i class="ph ph-users-three text-base"></i>
             </button>
         </div>
 
@@ -2112,6 +2126,54 @@
                 serverRailEl.style.display = channelsSidebarForcedOpen ? 'flex' : '';
             });
 
+            // ==========================================
+            // PAINEL DE PARTICIPANTES (volta pedida pelo Patrick -- mostra TODO
+            // mundo conectado na sala, não só quem tá num canal de voz como a
+            // lista da sidebar esquerda). Visível por padrão; oculta pelo X no
+            // próprio painel ou pelo botão do rodapé, os dois mexendo no mesmo
+            // estado.
+            // ==========================================
+            const participantsPanelEl = document.getElementById('participants-panel');
+            let participantsPanelHidden = false;
+            function setParticipantsPanelHidden(hidden) {
+                participantsPanelHidden = hidden;
+                participantsPanelEl.style.display = hidden ? 'none' : '';
+            }
+            document.getElementById('btn-close-participants').addEventListener('click', () => setParticipantsPanelHidden(true));
+            document.getElementById('btn-toggle-participants').addEventListener('click', () => setParticipantsPanelHidden(!participantsPanelHidden));
+
+            function renderParticipantsPanel() {
+                const users = window._users || [];
+                document.getElementById('participants-count').textContent = users.length + ' online';
+                const list = document.getElementById('participants-list');
+                list.innerHTML = '';
+                users.forEach(u => {
+                    const isSelf = u.id === socket.id;
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors';
+                    const roleBadge = u.isOwner
+                        ? '<span class="text-[9px] font-bold text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded px-1 flex-shrink-0">DONO</span>'
+                        : u.isAdmin
+                            ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>'
+                            : '';
+                    const voiceBadge = u.voiceChannel
+                        ? `<span class="text-[10px] text-emerald-400 flex items-center gap-0.5 flex-shrink-0"><i class="ph-fill ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}</span>`
+                        : '';
+                    row.innerHTML = `
+                        ${avatarHtml(u, 'w-7 h-7', isSelf)}
+                        <span class="truncate flex-1 text-sm text-zinc-200">${escapeHtml(u.name)}${isSelf ? ' (Você)' : ''}</span>
+                        ${roleBadge}
+                        ${voiceBadge}
+                    `;
+                    if (!isSelf) {
+                        row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
+                        row.style.cursor = 'context-menu';
+                        attachVolumeContextMenu(row, u.id, u.name, u.isAdmin);
+                    }
+                    list.appendChild(row);
+                });
+            }
+
             let latestRoomsList = []; // última lista de salas ativas recebida do servidor -- usada pela lista de escolha E pela barra de servidores conhecidos
             function renderRoomList(rooms) {
                 latestRoomsList = rooms || [];
@@ -2186,9 +2248,9 @@
                 if (!isOnline && !isCurrent) {
                     membersHtml = '<span>Sem ninguém agora -- entrar cria de novo</span>';
                 } else if (members.length === 0) {
-                    membersHtml = '<span>Ninguém conectado no momento</span>';
+                    membersHtml = '<span>Ninguém em chamada no momento</span>';
                 } else {
-                    membersHtml = `<span class="flex items-center gap-1 text-emerald-400 mb-1"><i class="ph-fill ph-circle text-[6px]"></i> ${members.length} online</span>` +
+                    membersHtml = `<span class="flex items-center gap-1 text-emerald-400 mb-1"><i class="ph-fill ph-phone-call text-[10px]"></i> ${members.length} em chamada</span>` +
                         members.slice(0, 8).map(m => `<div class="flex items-center gap-1.5 py-0.5">${avatarHtml({ id: m.name, name: m.name, avatar: m.avatar }, 'w-5 h-5', false)}<span class="truncate">${escapeHtml(m.name)}</span></div>`).join('') +
                         (members.length > 8 ? `<span>+${members.length - 8} outro(s)</span>` : '');
                 }
@@ -2710,6 +2772,7 @@
                 window._users = users;
                 amIOwner = !!users.find(u => u.id === socket.id)?.isOwner;
                 updateOwnUserBlock();
+                renderParticipantsPanel();
 
                 // Se alguém que eu assistia parou de transmitir ou saiu, removo a tela dele
                 const liveIds = new Set(users.filter(u => u.isStreaming).map(u => u.id));

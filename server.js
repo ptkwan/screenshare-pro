@@ -125,12 +125,14 @@ function getRoomList() {
       name,
       hasPassword: roomPasswords.has(name),
       icon: roomIcons.get(name) || null,
-      // Nome + avatar de quem tá na sala agora -- usado pro tooltip da barra
-      // de servidores conhecidos (mostrar quem tá online sem precisar entrar).
-      members: Array.from(memberIds).map(id => {
-        const s = io.sockets.sockets.get(id);
-        return { name: s?.data.username || 'Anônimo', avatar: s?.data.avatar || null };
-      }),
+      // Nome + avatar de quem está EM CHAMADA agora (canal de voz) -- usado
+      // pro tooltip da barra de servidores conhecidos. Só quem tá em chamada,
+      // não todo mundo conectado na sala (isso já aparece no painel de
+      // participantes depois de entrar).
+      members: Array.from(memberIds)
+        .map(id => io.sockets.sockets.get(id))
+        .filter(s => s && s.data.voiceChannel)
+        .map(s => ({ name: s.data.username || 'Anônimo', avatar: s.data.avatar || null })),
     }));
 }
 
