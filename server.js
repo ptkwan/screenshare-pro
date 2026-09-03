@@ -338,6 +338,9 @@ function removeFromRoom(socket, room) {
     broadcastUserList(room);
     broadcastVoiceChannels(room);
     io.to(room).emit('user-disconnected', socket.id);
+    // Mesmo motivo do join/leave-voice-channel: se quem saiu/caiu estava em
+    // chamada, o tooltip da barra de servidores (getRoomList()) precisa saber.
+    io.emit('rooms-update', getRoomList());
   }
 }
 
@@ -588,6 +591,12 @@ io.on('connection', (socket) => {
 
     broadcastUserList(room);
     broadcastVoiceChannels(room);
+    // getRoomList() (usado pelo tooltip de hover na barra de servidores) só
+    // considera quem está EM CHAMADA -- sem isso, entrar/sair de um canal de
+    // voz nunca atualizava essa lista (só join/leave da SALA disparavam esse
+    // broadcast), deixando o tooltip preso no estado de quando a sala foi
+    // aberta pela última vez.
+    io.emit('rooms-update', getRoomList());
   });
 
   socket.on('leave-voice-channel', () => {
@@ -596,6 +605,7 @@ io.on('connection', (socket) => {
     if (room) {
       broadcastUserList(room);
       broadcastVoiceChannels(room);
+      io.emit('rooms-update', getRoomList());
     }
   });
 
