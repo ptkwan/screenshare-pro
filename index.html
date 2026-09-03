@@ -2537,6 +2537,24 @@
                 socket.emit('get-rooms');
             });
 
+            // Reconexão de transporte (wifi cair um instante, servidor Render
+            // hibernando, etc.) dá um socket.id NOVO -- o servidor não tem mais
+            // nenhum registro desse socket em nenhuma sala (o antigo já foi
+            // removido pelo 'disconnect'). Sem isso, o cliente ficava "fantasma":
+            // a sidebar continuava mostrando a sala/canal de voz normalmente, mas
+            // o servidor não contava mais essa pessoa como presente em lugar
+            // nenhum (mensagens, voz, contagem de participantes, tudo quebrado
+            // silenciosamente, sem nenhum erro visível). 'reconnect' (do Manager,
+            // via socket.io) só dispara numa reconexão de verdade -- nunca na
+            // primeira conexão -- então não interfere no fluxo normal de entrar
+            // numa sala pela primeira vez.
+            socket.io.on('reconnect', () => {
+                if (currentRoom) {
+                    reportLog('info', `Reconectado -- reentrando na sala "${currentRoom}" pra não ficar fantasma`);
+                    joinRoom(currentRoom);
+                }
+            });
+
             socket.on('connect_error', () => {
                 discoveryStatus.innerHTML = `<i class="ph ph-warning-circle"></i> Servidor offline?`;
                 discoveryStatus.className = "text-sm text-red-500 flex items-center gap-2 bg-red-500/10 p-2 rounded border border-red-500/20";
