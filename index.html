@@ -438,7 +438,10 @@
             <input type="range" id="user-volume-slider" min="0" max="200" value="100" class="volume-slider flex-1">
             <span id="user-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
         </div>
-        <div class="border-t border-zinc-800 mt-2 pt-2">
+        <div class="border-t border-zinc-800 mt-2 pt-2 flex flex-col gap-1">
+            <button id="user-volume-menu-admin" type="button" class="w-full flex items-center gap-2 text-blue-400 hover:bg-blue-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors">
+                <i class="ph ph-shield-star"></i> <span id="user-volume-menu-admin-label">Tornar administrador</span>
+            </button>
             <button id="user-volume-menu-kick" type="button" class="w-full flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors">
                 <i class="ph ph-sign-out"></i> Expulsar da sala
             </button>
@@ -458,6 +461,16 @@
     <div id="server-rail-tooltip" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl px-3 py-2 pointer-events-none max-w-[220px]">
         <div class="text-sm font-semibold text-zinc-100 truncate" id="server-rail-tooltip-name"></div>
         <div class="text-xs text-zinc-400 mt-1 flex flex-col gap-0.5" id="server-rail-tooltip-members"></div>
+    </div>
+
+    <!-- MENU DE CONTEXTO (BOTÃO DIREITO) DA BARRA DE SERVIDORES -->
+    <div id="server-rail-context-menu" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-1.5 w-56">
+        <button id="server-rail-context-remove" type="button" class="w-full flex items-center gap-2 text-zinc-300 hover:bg-zinc-800 rounded px-2 py-1.5 text-xs font-medium transition-colors text-left">
+            <i class="ph ph-x-circle"></i> Remover da minha lista
+        </button>
+        <button id="server-rail-context-delete" type="button" class="hidden w-full flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors text-left">
+            <i class="ph ph-trash"></i> Apagar sala (todos os dados)
+        </button>
     </div>
 
     <!-- INPUT OCULTO PARA TROCAR O AVATAR (clique no seu próprio avatar) -->
@@ -1294,20 +1307,26 @@
             // ==========================================
             let volumeMenuPeerId = null;
             let volumeMenuPeerName = null;
+            let volumeMenuPeerIsAdmin = false;
             const userVolumeMenu = document.getElementById('user-volume-menu');
             const userVolumeSlider = document.getElementById('user-volume-slider');
             const userVolumeValue = document.getElementById('user-volume-value');
 
-            function openUserVolumeMenu(peerId, peerName, x, y) {
+            function openUserVolumeMenu(peerId, peerName, isPeerAdmin, x, y) {
                 volumeMenuPeerId = peerId;
                 volumeMenuPeerName = peerName;
+                volumeMenuPeerIsAdmin = !!isPeerAdmin;
                 document.getElementById('user-volume-menu-name').textContent = `Volume de ${peerName}`;
                 const pct = Math.round((userVolumes[peerId] ?? 1.0) * 100);
                 userVolumeSlider.value = pct;
                 userVolumeValue.textContent = pct + '%';
                 document.getElementById('user-volume-menu-kick').closest('div').classList.toggle('hidden', !amIOwner);
+                // Só o dono promove/remove admin -- um admin não pode promover outro
+                // admin nem a si mesmo, isso fica só com quem criou a sala.
+                document.getElementById('user-volume-menu-admin').classList.toggle('hidden', !amIOwner);
+                document.getElementById('user-volume-menu-admin-label').textContent = volumeMenuPeerIsAdmin ? 'Remover administrador' : 'Tornar administrador';
 
-                const menuWidth = 224, menuHeight = amIOwner ? 124 : 76;
+                const menuWidth = 224, menuHeight = amIOwner ? 168 : 76;
                 userVolumeMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
                 userVolumeMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
                 userVolumeMenu.classList.remove('hidden');
@@ -1317,6 +1336,7 @@
                 userVolumeMenu.classList.add('hidden');
                 volumeMenuPeerId = null;
                 volumeMenuPeerName = null;
+                volumeMenuPeerIsAdmin = false;
             }
 
             document.getElementById('user-volume-menu-kick').addEventListener('click', () => {
@@ -1327,6 +1347,16 @@
                 if (!confirm(`Expulsar ${name} da sala?`)) return;
                 socket.emit('kick-user', { userId: peerId });
                 showToast('Participante', `${name} foi expulso da sala.`);
+            });
+
+            document.getElementById('user-volume-menu-admin').addEventListener('click', () => {
+                if (!volumeMenuPeerId) return;
+                const name = volumeMenuPeerName || 'esse participante';
+                const peerId = volumeMenuPeerId;
+                const wasAdmin = volumeMenuPeerIsAdmin;
+                closeUserVolumeMenu();
+                socket.emit(wasAdmin ? 'demote-admin' : 'promote-admin', { userId: peerId });
+                showToast('Participante', wasAdmin ? `${name} não é mais administrador.` : `${name} agora é administrador.`);
             });
 
             userVolumeSlider.addEventListener('input', () => {
@@ -1346,10 +1376,10 @@
                 if (e.key === 'Escape') closeUserVolumeMenu();
             });
 
-            function attachVolumeContextMenu(el, peerId, peerName) {
+            function attachVolumeContextMenu(el, peerId, peerName, isPeerAdmin) {
                 el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
-                    openUserVolumeMenu(peerId, peerName, e.clientX, e.clientY);
+                    openUserVolumeMenu(peerId, peerName, isPeerAdmin, e.clientX, e.clientY);
                 });
             }
 
@@ -1629,12 +1659,13 @@
                         row.innerHTML = `
                             ${avatarHtml(m, 'w-6 h-6', isSelf)}
                             <span class="truncate flex-1">${escapeHtml(m.name)}${isSelf ? ' (Você)' : ''}</span>
+                            ${m.isAdmin ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>' : ''}
                             ${liveHtml}
                             <i class="ph ${micIcon} text-[11px] flex-shrink-0"></i>
                         `;
                         if (!isSelf) {
                             row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                            attachVolumeContextMenu(row, m.id, m.name);
+                            attachVolumeContextMenu(row, m.id, m.name, m.isAdmin);
                             if (m.isStreaming) row.style.cursor = 'pointer';
                             if (m.isStreaming) row.addEventListener('click', () => window.toggleWatch(m.id));
                         }
@@ -1746,11 +1777,12 @@
                     chip.innerHTML = `
                         ${avatarHtml(u, 'w-6 h-6', isMe)}
                         <span class="text-xs text-zinc-300 truncate max-w-[100px]">${escapeHtml(u.name)}${isMe ? ' (Você)' : ''}</span>
+                        ${u.isAdmin ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>' : ''}
                         ${watchBtn}
                     `;
                     if (!isMe) {
                         chip.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                        attachVolumeContextMenu(chip, u.id, u.name);
+                        attachVolumeContextMenu(chip, u.id, u.name, u.isAdmin);
                     }
                     strip.appendChild(chip);
                 });
@@ -2194,6 +2226,10 @@
                     btn.addEventListener('click', () => switchToRoom(name));
                     btn.addEventListener('mouseenter', () => showServerRailTooltip(btn, name, meta, isOnline, isCurrent));
                     btn.addEventListener('mouseleave', hideServerRailTooltip);
+                    btn.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        openServerRailContextMenu(name, isCurrent, e.clientX, e.clientY);
+                    });
                     wrap.appendChild(btn);
                     if (isCurrent) {
                         const bar = document.createElement('div');
@@ -2216,6 +2252,54 @@
                 }
                 joinRoom(name, savedPw);
             }
+
+            // ==========================================
+            // MENU DE CONTEXTO (BOTÃO DIREITO) NA BARRA DE SERVIDORES
+            // ==========================================
+            // "Apagar sala" só é possível pra sala ATUAL, sendo dono dela -- pra
+            // qualquer outra sala conhecida (offline, ou de outra pessoa) não dá
+            // pra saber se você é dono sem entrar nela primeiro, então a opção nem
+            // aparece.
+            let contextMenuRoomName = null;
+            const serverRailContextMenu = document.getElementById('server-rail-context-menu');
+            function openServerRailContextMenu(name, isCurrent, x, y) {
+                contextMenuRoomName = name;
+                const canDelete = isCurrent && amIOwner;
+                document.getElementById('server-rail-context-delete').classList.toggle('hidden', !canDelete);
+                const menuWidth = 224, menuHeight = canDelete ? 84 : 44;
+                serverRailContextMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
+                serverRailContextMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
+                serverRailContextMenu.classList.remove('hidden');
+            }
+            function closeServerRailContextMenu() {
+                serverRailContextMenu.classList.add('hidden');
+                contextMenuRoomName = null;
+            }
+            document.getElementById('server-rail-context-remove').addEventListener('click', () => {
+                const name = contextMenuRoomName;
+                closeServerRailContextMenu();
+                if (name) removeKnownRoom(name);
+            });
+            document.getElementById('server-rail-context-delete').addEventListener('click', () => {
+                const name = contextMenuRoomName;
+                closeServerRailContextMenu();
+                if (!name) return;
+                if (!confirm(`Apagar a sala "${name}" pra sempre? Mensagens, canais e configurações somem pra todo mundo. Essa ação não pode ser desfeita.`)) return;
+                socket.emit('delete-room');
+            });
+            document.addEventListener('click', (e) => {
+                if (!serverRailContextMenu.classList.contains('hidden') && !serverRailContextMenu.contains(e.target)) {
+                    closeServerRailContextMenu();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeServerRailContextMenu();
+            });
+
+            socket.on('room-deleted', () => {
+                removeKnownRoom(currentRoom);
+                returnToLobby('Sala apagada', 'Essa sala foi apagada pelo dono.');
+            });
 
             // ==========================================
             // WEBRTC - CONEXÕES DE ENVIO (SOU O BROADCASTER)

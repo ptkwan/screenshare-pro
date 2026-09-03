@@ -32,6 +32,11 @@ const roomPasswords = new Map(); // roomId -> hash da senha (só existe se a sal
 const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a sala recebe)
 const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcional)
 const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
+// roomId -> Set<username> promovido a administrador pelo dono. Preso ao NOME
+// (não a um token) de propósito -- sem sistema de conta/login, é o único jeito
+// simples de "lembrar" quem é admin entre reconexões: continua admin enquanto
+// reconectar com esse mesmo nome na mesma sala.
+const roomAdminNames = new Map();
 
 // ==========================================
 // PERSISTÊNCIA (Upstash Redis, opcional) -- sem UPSTASH_REDIS_REST_URL e
@@ -62,6 +67,7 @@ function roomSnapshot(roomId) {
     passwordHash: roomPasswords.get(roomId) || null,
     ownerToken: roomOwnerTokens.get(roomId) || null,
     icon: roomIcons.get(roomId) || null,
+    adminNames: Array.from(roomAdminNames.get(roomId) || []),
   };
 }
 
@@ -103,6 +109,7 @@ async function loadRoomsFromRedis() {
       if (snap.passwordHash) roomPasswords.set(roomId, snap.passwordHash);
       if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
       if (snap.icon) roomIcons.set(roomId, snap.icon);
+      if (snap.adminNames?.length) roomAdminNames.set(roomId, new Set(snap.adminNames));
       roomVoiceMembers.set(roomId, new Map());
       roomBroadcasters.set(roomId, new Map());
     }
@@ -238,6 +245,7 @@ function broadcastUserList(roomId) {
       name: s?.data.username || 'Anônimo',
       avatar: s?.data.avatar || null,
       isOwner: !!s?.data.isOwner,
+      isAdmin: !!s?.data.isAdmin,
       voiceChannel,
       isStreaming: voiceChannel ? (broadcasters.get(voiceChannel)?.has(id) || false) : false
     };
@@ -359,6 +367,10 @@ function finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom })
     socket.data.isOwner = isOwnerByToken;
   }
 
+  // Admin "gruda" no nome dentro dessa sala -- reconectar (ou reentrar) com o
+  // mesmo nome continua admin, sem precisar o dono promover de novo.
+  socket.data.isAdmin = !isNewRoom && !!roomAdminNames.get(roomId)?.has(socket.data.username);
+
   completeJoin(socket, roomId);
 }
 
@@ -423,6 +435,7 @@ io.on('connection', (socket) => {
     removeFromRoom(socket, room);
     socket.data.room = null;
     socket.data.isOwner = false;
+    socket.data.isAdmin = false;
     socket.data.voiceChannel = null;
     console.log(`[leave-room] ${socket.id} (${socket.data.username}) saiu da sala "${room}"`);
   });
@@ -469,6 +482,7 @@ io.on('connection', (socket) => {
     renameMapKey(roomPasswords, oldRoom, trimmed);
     renameMapKey(roomOwnerTokens, oldRoom, trimmed);
     renameMapKey(roomIcons, oldRoom, trimmed);
+    renameMapKey(roomAdminNames, oldRoom, trimmed);
     deleteRoomFromRedis(oldRoom); // a sala "velha" não existe mais sob esse nome
     markRoomDirty(trimmed);
 
@@ -494,8 +508,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('rename-channel', ({ type, oldName, newName }) => {
-    if (!socket.data.isOwner) {
-      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou renomear um canal sem ser dono`);
+    if (!socket.data.isOwner && !socket.data.isAdmin) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou renomear um canal sem ser dono/admin`);
       return;
     }
     const room = socket.data.room;
@@ -621,8 +635,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('kick-user', ({ userId }) => {
-    if (!socket.data.isOwner) {
-      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou expulsar sem ser dono`);
+    if (!socket.data.isOwner && !socket.data.isAdmin) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou expulsar sem ser dono/admin`);
       return;
     }
     const room = socket.data.room;
@@ -631,6 +645,11 @@ io.on('connection', (socket) => {
 
     const targetSocket = io.sockets.sockets.get(userId);
     if (!targetSocket) return;
+    // Admin não pode expulsar o dono -- só o dono manda em quem manda.
+    if (!socket.data.isOwner && targetSocket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou expulsar o dono sendo só admin`);
+      return;
+    }
     const targetName = targetSocket.data.username;
 
     // Desconectar logo depois do emit é uma corrida: o pacote pode se perder
@@ -649,6 +668,88 @@ io.on('connection', (socket) => {
     console.log(`[kick] ${socket.data.username} (${socket.id}) expulsou ${targetName} (${userId}) da sala "${room}"`);
     targetSocket.emit('kicked', { by: socket.data.username }, () => doDisconnect(true));
     setTimeout(() => doDisconnect(false), 1500);
+  });
+
+  // Promover/remover administrador -- só o dono decide (um admin não pode
+  // promover outro admin nem a si mesmo). Fica preso ao NOME dentro da sala
+  // (ver comentário de roomAdminNames): reconectar com o mesmo nome continua
+  // admin, mas outro nome (ou trocar de sala) não carrega o cargo junto.
+  socket.on('promote-admin', ({ userId }) => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou promover admin sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    if (!room || !userId || userId === socket.id) return;
+    const targetSocket = io.sockets.sockets.get(userId);
+    if (!targetSocket || targetSocket.data.room !== room) return;
+
+    if (!roomAdminNames.has(room)) roomAdminNames.set(room, new Set());
+    roomAdminNames.get(room).add(targetSocket.data.username);
+    targetSocket.data.isAdmin = true;
+    markRoomDirty(room);
+    broadcastUserList(room);
+    console.log(`[admin] ${socket.data.username} promoveu ${targetSocket.data.username} a administrador na sala "${room}"`);
+  });
+
+  socket.on('demote-admin', ({ userId }) => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou remover admin sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    if (!room || !userId) return;
+    const targetSocket = io.sockets.sockets.get(userId);
+    if (!targetSocket || targetSocket.data.room !== room) return;
+
+    roomAdminNames.get(room)?.delete(targetSocket.data.username);
+    targetSocket.data.isAdmin = false;
+    markRoomDirty(room);
+    broadcastUserList(room);
+    console.log(`[admin] ${socket.data.username} removeu ${targetSocket.data.username} de administrador na sala "${room}"`);
+  });
+
+  // Apagar a sala inteira -- irreversível, só o dono. Tira todo mundo de
+  // volta pro lobby e some com canais/mensagens/senha/ícone/admins, tanto da
+  // memória quanto do Redis (se configurado).
+  socket.on('delete-room', () => {
+    if (!socket.data.isOwner) {
+      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou apagar a sala sem ser dono`);
+      return;
+    }
+    const room = socket.data.room;
+    if (!room || !rooms.has(room)) return;
+
+    // Avisa ANTES de tirar todo mundo da room do socket.io -- `io.to(room)`
+    // só alcança quem ainda está com `.join(room)` ativo, então emitir depois
+    // do `.leave()` faria o evento não chegar em ninguém.
+    io.to(room).emit('room-deleted');
+
+    const memberIds = Array.from(rooms.get(room));
+    memberIds.forEach(id => {
+      const s = io.sockets.sockets.get(id);
+      if (!s) return;
+      s.leave(room);
+      s.data.room = null;
+      s.data.isOwner = false;
+      s.data.isAdmin = false;
+      s.data.voiceChannel = null;
+    });
+
+    rooms.delete(room);
+    roomChannels.delete(room);
+    roomVoiceMembers.delete(room);
+    roomBroadcasters.delete(room);
+    roomMessages.delete(room);
+    roomPasswords.delete(room);
+    roomOwnerTokens.delete(room);
+    roomIcons.delete(room);
+    roomAdminNames.delete(room);
+    dirtyRooms.delete(room);
+    deleteRoomFromRedis(room);
+
+    io.emit('rooms-update', getRoomList());
+    console.log(`[apaga-sala] ${socket.id} (${socket.data.username}) apagou a sala "${room}" pra sempre`);
   });
 
   // Retransmissão de sinalização WebRTC (voz e compartilhamento de tela) --
