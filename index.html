@@ -1064,9 +1064,24 @@
                     });
 
                     const source = denoiseCtx.createMediaStreamSource(raw);
+
+                    // Passo extra ANTES do RNNoise: filtro passa-alta cortando abaixo de
+                    // ~110Hz. RNNoise é treinado pra ruído de fundo estacionário (ventilador,
+                    // chiado) -- ele não pega bem impacto grave transmitido pela mesa/chão
+                    // (bater o pé, esbarrar na mesa, step no chão), porque essa energia é
+                    // toda concentrada bem abaixo da faixa da voz. Um highpass nativo
+                    // resolve isso de forma direta e sem custo de CPU: corta o retumbo grave
+                    // antes de chegar no RNNoise, sem tocar na faixa da voz (fundamental
+                    // grave de voz masculina começa por volta de 85-100Hz, então 110Hz com
+                    // Q baixo tira o grosso do impacto sem cortar fala perceptivelmente).
+                    const rumbleFilter = denoiseCtx.createBiquadFilter();
+                    rumbleFilter.type = 'highpass';
+                    rumbleFilter.frequency.value = 110;
+                    rumbleFilter.Q.value = 0.7;
+
                     const rnnoise = new window.RnnoiseWorkletNode(denoiseCtx, { maxChannels: 1, wasmBinary });
                     const dest = denoiseCtx.createMediaStreamDestination();
-                    source.connect(rnnoise).connect(dest);
+                    source.connect(rumbleFilter).connect(rnnoise).connect(dest);
 
                     outgoingVoiceStream = dest.stream;
                     console.log('[rnnoise] supressão de ruído ativa no microfone');

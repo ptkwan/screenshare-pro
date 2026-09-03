@@ -1,6 +1,6 @@
 {
   "name": "screenshare-pro",
-  "version": "1.15.1",
+  "version": "1.15.2",
   "description": "App de compartilhamento de tela em rede local",
   "main": "main.js",
   "scripts": {
