@@ -18,6 +18,42 @@ const io = new Server(server, {
   pingTimeout: 60000
 });
 
+// ==========================================
+// TURN (Metered.ca) -- sem servidor TURN, WebRTC só consegue achar rota P2P
+// direta; gente atrás de NAT/firewall restritivo (rede corporativa,
+// universitária, 4G) nunca conecta em voz/tela nenhuma (confirmado via log de
+// ICE, ver BUGS.md). A API key NUNCA vai pro cliente (client/index.html é
+// distribuído publicamente) -- fica só aqui como variável de ambiente, e o
+// servidor busca as credenciais e repassa só o resultado (usuário/senha de
+// TURN, que por natureza do protocolo sempre fica visível pra quem usa,
+// diferente da API key que gera essas credenciais).
+// ==========================================
+const METERED_API_KEY = process.env.METERED_API_KEY || null;
+const METERED_TURN_URL = `https://stream-ai.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
+const TURN_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // credenciais do Metered valem bem mais que isso -- evita bater na API a cada pedido
+let turnServersCache = null;
+let turnServersCacheAt = 0;
+
+if (!METERED_API_KEY) {
+  console.log('[turn] METERED_API_KEY não configurada -- WebRTC só com STUN, sem plano B pra NAT restritivo.');
+}
+
+async function getTurnServers() {
+  if (!METERED_API_KEY) return [];
+  if (turnServersCache && (Date.now() - turnServersCacheAt) < TURN_CACHE_TTL_MS) return turnServersCache;
+  try {
+    const res = await fetch(METERED_TURN_URL);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const servers = await res.json();
+    turnServersCache = Array.isArray(servers) ? servers : [];
+    turnServersCacheAt = Date.now();
+    return turnServersCache;
+  } catch (e) {
+    console.error('[turn] falha ao buscar credenciais do Metered:', e.message);
+    return turnServersCache || []; // usa o cache velho (se tiver) em vez de deixar sem TURN nenhum
+  }
+}
+
 const DEFAULT_TEXT_CHANNELS = ['geral', 'off-topic'];
 const DEFAULT_VOICE_CHANNELS = ['Sala 1', 'Sala 2', 'Sala 3'];
 const MAX_MESSAGES_PER_CHANNEL = 200;
@@ -391,6 +427,15 @@ io.on('connection', (socket) => {
 
   socket.on('get-rooms', () => {
     socket.emit('rooms-list', getRoomList());
+  });
+
+  // Cliente pede os iceServers (STUN fixo + TURN do Metered, se configurado)
+  // pra montar o RTCPeerConnection -- usa ack em vez de emit separado, mais
+  // simples do lado do cliente (uma Promise só).
+  socket.on('get-ice-servers', async (ack) => {
+    if (typeof ack !== 'function') return;
+    const turnServers = await getTurnServers();
+    ack(turnServers);
   });
 
   socket.on('join-room', (payload) => {

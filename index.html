@@ -795,6 +795,7 @@
             const selectedStreamers = new Set();
 
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            let iceServersLoaded = false; // evita duplicar entradas em config.iceServers a cada reconexão de transporte
 
             // Player começa mutado, volume "cheio" quando ativado
             // Começa desmutado por padrão — senão a pessoa acha que o app tá com
@@ -2802,6 +2803,21 @@
                 btnCreateRoom.disabled = false;
                 showToast('Conectado', 'Servidor conectado.');
                 socket.emit('get-rooms');
+
+                // Servidor TURN (Metered) -- só busca uma vez por sessão do app (o
+                // 'connect' também dispara de novo em toda reconexão de transporte;
+                // sem essa trava, cada reconexão duplicaria as entradas em
+                // config.iceServers). Sem TURN configurado no servidor, volta um
+                // array vazio e o app segue só com STUN, igual sempre foi.
+                if (!iceServersLoaded) {
+                    iceServersLoaded = true;
+                    socket.emit('get-ice-servers', (turnServers) => {
+                        if (Array.isArray(turnServers) && turnServers.length > 0) {
+                            config.iceServers = [...config.iceServers, ...turnServers];
+                            console.log(`[turn] ${turnServers.length} servidor(es) TURN carregado(s).`);
+                        }
+                    });
+                }
             });
 
             // Reconexão de transporte (wifi cair um instante, servidor Render
