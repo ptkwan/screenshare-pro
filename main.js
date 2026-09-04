@@ -38,6 +38,8 @@ app.on('window-all-closed', () => {
 
 ipcMain.on('close-app', () => app.quit());
 
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 // ==========================================
 // NOTIFICAÇÃO NATIVA DE NOVA MENSAGEM NO CHAT
 // ==========================================
