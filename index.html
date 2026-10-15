@@ -872,10 +872,10 @@
             // ==========================================
             const QUALITY_TIERS = [
                 { key: 'ultra',  label: 'Ultra (4K)',     width: 3840, height: 2160, frameRate: 60, maxBitrate: 12000000 },
-                { key: 'alta',   label: 'Alta (1440p)',   width: 2560, height: 1440, frameRate: 30, maxBitrate: 6000000 },
-                { key: 'media',  label: 'Média (1080p)',  width: 1920, height: 1080, frameRate: 30, maxBitrate: 3000000 },
-                { key: 'baixa',  label: 'Baixa (720p)',   width: 1280, height: 720,  frameRate: 24, maxBitrate: 1200000 },
-                { key: 'minima', label: 'Mínima (480p)',  width: 854,  height: 480,  frameRate: 15, maxBitrate: 500000 }
+                { key: 'alta',   label: 'Alta (1440p)',   width: 2560, height: 1440, frameRate: 60, maxBitrate: 9000000 },
+                { key: 'media',  label: 'Média (1080p)',  width: 1920, height: 1080, frameRate: 60, maxBitrate: 5000000 },
+                { key: 'baixa',  label: 'Baixa (720p)',   width: 1280, height: 720,  frameRate: 60, maxBitrate: 2500000 },
+                { key: 'minima', label: 'Mínima (480p)',  width: 854,  height: 480,  frameRate: 30, maxBitrate: 1000000 }
             ];
             const QUALITY_CHECK_INTERVAL = 5000;
             const QUALITY_CHANGE_COOLDOWN = 12000;
@@ -2637,6 +2637,10 @@
                     params.encodings[0].maxFramerate = tier.frameRate;
                     params.encodings[0].scaleResolutionDownBy = scale;
                     params.encodings[0].priority = 'high';
+                    params.encodings[0].networkPriority = 'high';
+                    // Com banda apertada, baixa a resolução em vez de derrubar FPS
+                    // (o padrão do Chromium pra tela é o contrário e causa travadas).
+                    params.degradationPreference = 'maintain-framerate';
                     await sender.setParameters(params);
                 } catch (e) {
                     console.warn('Não foi possível ajustar a qualidade do vídeo:', e);
@@ -3446,7 +3450,9 @@
                     }
 
                     const videoTrack = capturedStream.getVideoTracks()[0];
-                    videoTrack.contentHint = 'detail'; // prioriza nitidez de texto/detalhe sobre fluidez
+                    // 'motion' prioriza fluidez (FPS) sobre nitidez -- 'detail' fazia o
+                    // encoder derrubar o framerate pra manter resolução, causando travadas.
+                    videoTrack.contentHint = 'motion';
                     const videoSettings = videoTrack.getSettings();
 
                     const audioTracks = nativeAudioTrack ? [nativeAudioTrack] : capturedStream.getAudioTracks();

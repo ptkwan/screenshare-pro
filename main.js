@@ -17,7 +17,11 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            // Quem compartilha tela normalmente está jogando com o app em segundo
+            // plano/coberto -- sem isso o Chromium reduz a taxa de timers/render da
+            // janela e o vídeo enviado engasga.
+            backgroundThrottling: false
         }
     });
 
