@@ -6,9 +6,6 @@ const { autoUpdater } = require('electron-updater');
 process.on('uncaughtException', (error) => console.error('Erro Crítico:', error));
 process.on('unhandledRejection', (reason) => console.error('Promessa Rejeitada:', reason));
 
-autoUpdater.on('error', (error) => console.error('Erro no auto-update:', error));
-autoUpdater.on('update-downloaded', () => console.log('Atualização baixada, será instalada ao fechar o app.'));
-
 let mainWindow;
 let activeCapture = null; // instância do LoopbackCapture em uso no momento (só uma por vez)
 
@@ -16,6 +13,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
         height: 720,
+        backgroundColor: '#313338', // evita o "flash" branco antes da página carregar
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -27,9 +25,112 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-app.whenReady().then(() => {
+// ==========================================
+// ATUALIZAÇÃO AO ABRIR (igual ao Discord)
+// ==========================================
+// Antes: checkForUpdatesAndNotify() baixava em segundo plano, mostrava uma
+// notificação do Windows e só instalava ao fechar o app -- pelo instalador
+// com assistente, que aparecia pedindo pra atualizar. Agora: uma janelinha
+// (splash) procura atualização ANTES de abrir o app; se tiver, baixa, instala
+// em silêncio e reabre já na versão nova. Se não tiver (ou der erro / demorar
+// demais pra responder), abre o app normalmente.
+const UPDATE_CHECK_TIMEOUT_MS = 15_000; // sem resposta nesse tempo = abre o app mesmo assim
+const BACKGROUND_CHECK_INTERVAL_MS = 60 * 60 * 1000; // com o app aberto, procura de novo a cada hora
+
+let splashWindow = null;
+let splashStatus = { text: 'Iniciando...', progress: null };
+let mainOpened = false;
+
+function createSplashWindow() {
+    splashWindow = new BrowserWindow({
+        width: 300,
+        height: 340,
+        frame: false,
+        resizable: false,
+        maximizable: false,
+        center: true,
+        show: false,
+        backgroundColor: '#2b2d31',
+        webPreferences: { contextIsolation: true, nodeIntegration: false }
+    });
+    splashWindow.loadFile('splash.html');
+    splashWindow.once('ready-to-show', () => splashWindow.show());
+    // Reaplica o último status quando a página termina de carregar (o
+    // updater pode mandar status antes disso)
+    splashWindow.webContents.on('did-finish-load', () => setSplashStatus(splashStatus.text, splashStatus.progress));
+}
+
+function setSplashStatus(text, progress = null) {
+    splashStatus = { text, progress };
+    if (!splashWindow || splashWindow.isDestroyed()) return;
+    const progressArg = typeof progress === 'number' ? progress.toFixed(1) : 'null';
+    splashWindow.webContents
+        .executeJavaScript(`window.setStatus && window.setStatus(${JSON.stringify(text)}, ${progressArg})`)
+        .catch(() => { /* página ainda carregando -- did-finish-load reaplica */ });
+}
+
+function openMainAndCloseSplash() {
+    if (mainOpened) return;
+    mainOpened = true;
+    // Abre a principal ANTES de fechar o splash -- senão, sem nenhuma janela
+    // aberta, o 'window-all-closed' encerraria o app.
     createWindow();
-    autoUpdater.checkForUpdatesAndNotify();
+    mainWindow.once('ready-to-show', () => {
+        if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+        splashWindow = null;
+    });
+    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), BACKGROUND_CHECK_INTERVAL_MS);
+}
+
+function startUpdateCheck() {
+    autoUpdater.autoDownload = true;
+    // Atualização achada com o app já aberto (checagem de hora em hora, ou a
+    // primeira que demorou mais que o timeout) não derruba ninguém no meio de
+    // uma chamada: instala em silêncio quando o app for fechado.
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    let downloading = false;
+    const timeout = setTimeout(() => { if (!downloading) openMainAndCloseSplash(); }, UPDATE_CHECK_TIMEOUT_MS);
+
+    autoUpdater.on('checking-for-update', () => { if (!mainOpened) setSplashStatus('Procurando atualizações...'); });
+    autoUpdater.on('update-available', (info) => {
+        if (mainOpened) return;
+        downloading = true;
+        clearTimeout(timeout);
+        setSplashStatus(`Baixando atualização ${info.version}...`, 0);
+    });
+    autoUpdater.on('download-progress', (p) => { if (!mainOpened) setSplashStatus('Baixando atualização...', p.percent); });
+    autoUpdater.on('update-not-available', () => {
+        clearTimeout(timeout);
+        setSplashStatus('Iniciando...');
+        openMainAndCloseSplash();
+    });
+    autoUpdater.on('update-downloaded', () => {
+        if (mainOpened) {
+            console.log('Atualização baixada com o app aberto -- instala em silêncio ao fechar.');
+            return;
+        }
+        setSplashStatus('Instalando...');
+        // isSilent=true: sem o assistente do instalador; isForceRunAfter=true: reabre o app sozinho
+        setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    });
+    autoUpdater.on('error', (error) => {
+        console.error('Erro no auto-update:', error);
+        clearTimeout(timeout);
+        openMainAndCloseSplash();
+    });
+
+    autoUpdater.checkForUpdates().catch(() => { /* já tratado no 'error' */ });
+}
+
+app.whenReady().then(() => {
+    // Em modo dev (npm start) não tem o que atualizar -- abre direto
+    if (!app.isPackaged) {
+        createWindow();
+        return;
+    }
+    createSplashWindow();
+    startUpdateCheck();
 });
 
 app.on('window-all-closed', () => {

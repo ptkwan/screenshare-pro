@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'">
+    <title>Streama AI</title>
+    <!-- Janelinha de inicialização (igual a do Discord): procura atualização,
+         mostra o progresso do download e some quando o app principal abre. -->
+    <style>
+        html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; -webkit-app-region: drag; }
+        body {
+            background: #2b2d31; color: #dbdee1;
+            font-family: "gg sans", "Noto Sans", "Segoe UI", system-ui, sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+        }
+        img { width: 96px; height: 96px; border-radius: 24px; animation: pulse 1.6s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        #status { font-size: 14px; color: #b5bac1; text-align: center; min-height: 20px; padding: 0 16px; }
+        .bar { width: 180px; height: 6px; border-radius: 3px; background: #1e1f22; overflow: hidden; visibility: hidden; }
+        .bar.show { visibility: visible; }
+        .fill { height: 100%; width: 0; background: #5865f2; transition: width 0.2s ease; }
+    </style>
+</head>
+<body>
+    <img src="assets/logo.png" alt="">
+    <div id="status">Iniciando...</div>
+    <div class="bar" id="bar"><div class="fill" id="fill"></div></div>
+    <script>
+        // Chamado pelo main.js (executeJavaScript) a cada mudança de etapa
+        window.setStatus = (text, progress) => {
+            document.getElementById('status').textContent = text;
+            const hasProgress = typeof progress === 'number';
+            document.getElementById('bar').classList.toggle('show', hasProgress);
+            if (hasProgress) document.getElementById('fill').style.width = Math.max(0, Math.min(100, progress)) + '%';
+        };
+    </script>
+</body>
+</html>

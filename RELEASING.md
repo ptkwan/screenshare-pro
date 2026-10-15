@@ -36,10 +36,14 @@ Repositório de releases: https://github.com/ptkwan/screenshare-pro
 
    (troque `vX.Y.Z` pela versão que você acabou de lançar, ex: `v1.0.2`)
 
-4. Pronto. Na próxima vez que cada amigo abrir o app, ele:
-   - detecta a nova versão,
-   - baixa em segundo plano,
-   - instala sozinho assim que o app for fechado (não precisa fazer nada).
+4. Pronto. Na próxima vez que cada amigo abrir o app (igual ao Discord):
+   - a janelinha de inicialização mostra "Procurando atualizações...",
+   - baixa a versão nova com barra de progresso,
+   - instala em silêncio (sem assistente do instalador) e reabre já atualizado.
+
+   Se a versão nova sair com o app já aberto, ele percebe na checagem de hora
+   em hora e instala em silêncio quando o app for fechado -- nunca derruba
+   ninguém no meio de uma chamada.
 
 ## Resumo rápido (copiar e colar)
 
