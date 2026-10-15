@@ -54,6 +54,11 @@ async function getTurnServers() {
   }
 }
 
+// O app tem um servidor só (igual a abrir o Discord no seu servidor): todo
+// mundo entra direto nele, não dá pra criar/renomear/apagar salas. Qualquer
+// outra sala que ainda exista salva no Redis é apagada ao iniciar.
+const FIXED_ROOM = process.env.ROOM_NAME || 'Quartonha';
+
 const DEFAULT_TEXT_CHANNELS = ['geral', 'off-topic'];
 const DEFAULT_VOICE_CHANNELS = ['Sala 1', 'Sala 2', 'Sala 3'];
 const MAX_MESSAGES_PER_CHANNEL = 200;
@@ -66,7 +71,6 @@ const roomChannels = new Map(); // roomId -> { text: string[], voice: string[] }
 const roomVoiceMembers = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomBroadcasters = new Map(); // roomId -> Map<canalDeVoz, Set<socketId>>
 const roomMessages = new Map(); // roomId -> Map<canalDeTexto, Array<mensagem>>
-const roomPasswords = new Map(); // roomId -> hash da senha (só existe se a sala tiver senha)
 const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a sala recebe)
 const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcional)
 const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
@@ -94,6 +98,10 @@ if (!redis) {
 const REDIS_ROOM_PREFIX = 'roshan:room:';
 const REDIS_FLUSH_INTERVAL_MS = 5000; // agrupa gravações em vez de uma por mensagem/evento
 const dirtyRooms = new Set();
+// Só grava no Redis depois de ter lido o que já estava salvo -- se a leitura
+// falhar, gravar a sala "nova" em memória apagaria as mensagens, canais e o
+// dono de verdade (ver loadRoomsFromRedis).
+let persistenceEnabled = false;
 
 function markRoomDirty(roomId) {
   if (redis) dirtyRooms.add(roomId);
@@ -103,7 +111,6 @@ function roomSnapshot(roomId) {
   return {
     channels: roomChannels.get(roomId),
     messages: Object.fromEntries(roomMessages.get(roomId) || []),
-    passwordHash: roomPasswords.get(roomId) || null,
     ownerToken: roomOwnerTokens.get(roomId) || null,
     icon: roomIcons.get(roomId) || null,
     adminTokens: Array.from(roomAdminTokens.get(roomId) || []),
@@ -111,7 +118,7 @@ function roomSnapshot(roomId) {
 }
 
 async function flushDirtyRooms() {
-  if (!redis || dirtyRooms.size === 0) return;
+  if (!redis || !persistenceEnabled || dirtyRooms.size === 0) return;
   const toFlush = Array.from(dirtyRooms);
   dirtyRooms.clear();
   for (const roomId of toFlush) {
@@ -126,45 +133,58 @@ async function flushDirtyRooms() {
 }
 if (redis) setInterval(flushDirtyRooms, REDIS_FLUSH_INTERVAL_MS);
 
-async function deleteRoomFromRedis(roomId) {
-  if (!redis) return;
-  try { await redis.del(REDIS_ROOM_PREFIX + roomId); } catch (e) { console.error('[redis] falha ao apagar sala antiga do banco:', e.message); }
-}
-
 // Recupera todas as salas salvas ANTES do servidor aceitar conexões --
 // assim, na visão de quem conecta, é como se o processo nunca tivesse
 // reiniciado (exceto quem já tava conectado, que precisa entrar de novo).
+const REDIS_LOAD_ATTEMPTS = 5;
+const REDIS_LOAD_RETRY_MS = 3000;
+
 async function loadRoomsFromRedis() {
   if (!redis) return;
-  try {
-    const keys = await redis.keys(REDIS_ROOM_PREFIX + '*');
-    for (const key of keys) {
-      const roomId = key.slice(REDIS_ROOM_PREFIX.length);
-      const snap = await redis.get(key);
-      if (!snap) continue;
-      rooms.set(roomId, new Set());
-      roomChannels.set(roomId, snap.channels || { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
-      roomMessages.set(roomId, new Map(Object.entries(snap.messages || {})));
-      if (snap.passwordHash) roomPasswords.set(roomId, snap.passwordHash);
-      if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
-      if (snap.icon) roomIcons.set(roomId, snap.icon);
-      // `adminNames` (formato antigo, preso ao nome) é ignorado de propósito --
-      // era justamente a brecha; o dono precisa promover de novo.
-      if (snap.adminTokens?.length) roomAdminTokens.set(roomId, new Set(snap.adminTokens));
-      roomVoiceMembers.set(roomId, new Map());
-      roomBroadcasters.set(roomId, new Map());
+  for (let attempt = 1; attempt <= REDIS_LOAD_ATTEMPTS; attempt++) {
+    try {
+      await loadRoomsFromRedisOnce();
+      persistenceEnabled = true;
+      return;
+    } catch (e) {
+      console.error(`[redis] falha ao carregar salas salvas (tentativa ${attempt}/${REDIS_LOAD_ATTEMPTS}):`, e.message);
+      if (attempt < REDIS_LOAD_ATTEMPTS) await new Promise(r => setTimeout(r, REDIS_LOAD_RETRY_MS));
     }
-    console.log(`[redis] ${keys.length} sala(s) recuperada(s) do banco.`);
-  } catch (e) {
-    console.error('[redis] falha ao carregar salas salvas -- iniciando só com o que tiver em memória:', e.message);
   }
+  // Sem conseguir ler, NÃO grava nada nessa execução: a sala em memória está
+  // vazia e sobrescreveria a de verdade. Funciona normal, só sem salvar.
+  console.error('[redis] não deu pra carregar as salas -- gravação no Redis DESLIGADA nessa execução pra não sobrescrever os dados salvos.');
+}
+
+async function loadRoomsFromRedisOnce() {
+  const keys = await redis.keys(REDIS_ROOM_PREFIX + '*');
+  for (const key of keys) {
+    const roomId = key.slice(REDIS_ROOM_PREFIX.length);
+    if (roomId !== FIXED_ROOM) {
+      await redis.del(key);
+      console.log(`[redis] sala "${roomId}" apagada (o app agora só tem "${FIXED_ROOM}")`);
+      continue;
+    }
+    const snap = await redis.get(key);
+    if (!snap) continue;
+    rooms.set(roomId, new Set());
+    roomChannels.set(roomId, snap.channels || { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
+    roomMessages.set(roomId, new Map(Object.entries(snap.messages || {})));
+    if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
+    if (snap.icon) roomIcons.set(roomId, snap.icon);
+    // `adminNames` (formato antigo, preso ao nome) é ignorado de propósito --
+    // era justamente a brecha; o dono precisa promover de novo.
+    if (snap.adminTokens?.length) roomAdminTokens.set(roomId, new Set(snap.adminTokens));
+    roomVoiceMembers.set(roomId, new Map());
+    roomBroadcasters.set(roomId, new Map());
+  }
+  console.log(`[redis] sala "${FIXED_ROOM}" ${rooms.has(FIXED_ROOM) ? 'recuperada' : 'não existia'} no banco.`);
 }
 
 function getRoomList() {
   return Array.from(rooms.entries())
     .map(([name, memberIds]) => ({
       name,
-      hasPassword: roomPasswords.has(name),
       icon: roomIcons.get(name) || null,
       // Nome + avatar de quem está EM CHAMADA agora (canal de voz) -- usado
       // pro tooltip da barra de servidores conhecidos. Só quem tá em chamada,
@@ -247,66 +267,6 @@ function uniqueNameInRoom(roomId, name, socket) {
   }
 }
 
-// scrypt com salt aleatório -- SHA-256 puro (formato antigo) é rápido demais
-// pra senha: com o hash vazado (ex: Redis), dava pra testar bilhões de
-// tentativas por segundo, e senhas iguais geravam hashes iguais.
-// Formato: "scrypt$<salt hex>$<hash hex>". Hash antigo (64 hex, SHA-256) ainda
-// é aceito e é trocado pelo novo formato no primeiro acerto.
-const SCRYPT_KEYLEN = 32;
-
-function hashPassword(pw) {
-  const salt = crypto.randomBytes(16);
-  const hash = crypto.scryptSync((pw || '').toString(), salt, SCRYPT_KEYLEN);
-  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
-}
-
-function isLegacyPasswordHash(storedHash) {
-  return !storedHash.startsWith('scrypt$');
-}
-
-// Compara hashes em tempo constante -- comparar string com "!==" direto
-// vazaria informação por quanto tempo a comparação leva (timing attack),
-// dando pra descobrir a senha certa byte a byte medindo a resposta.
-function passwordMatches(candidate, storedHash) {
-  const pw = (candidate || '').toString();
-  let candidateHash, stored;
-  if (isLegacyPasswordHash(storedHash)) {
-    candidateHash = crypto.createHash('sha256').update(pw).digest();
-    stored = Buffer.from(storedHash, 'hex');
-  } else {
-    const [, saltHex, hashHex] = storedHash.split('$');
-    stored = Buffer.from(hashHex || '', 'hex');
-    candidateHash = crypto.scryptSync(pw, Buffer.from(saltHex || '', 'hex'), SCRYPT_KEYLEN);
-  }
-  return candidateHash.length === stored.length && crypto.timingSafeEqual(candidateHash, stored);
-}
-
-// Limite de tentativas de senha por IP+sala -- sem isso, dava pra tentar
-// senha atrás de senha sem parar (força bruta) já que não tem captcha nem
-// conta de usuário nenhuma travando isso.
-const PASSWORD_MAX_ATTEMPTS = 5;
-const PASSWORD_LOCKOUT_MS = 60_000;
-const passwordAttempts = new Map(); // "ip|sala" -> { count, lockedUntil }
-
-function isLockedOut(key) {
-  const entry = passwordAttempts.get(key);
-  return !!entry && entry.lockedUntil > Date.now();
-}
-
-function registerFailedAttempt(key) {
-  const entry = passwordAttempts.get(key) || { count: 0, lockedUntil: 0 };
-  entry.count += 1;
-  if (entry.count >= PASSWORD_MAX_ATTEMPTS) {
-    entry.lockedUntil = Date.now() + PASSWORD_LOCKOUT_MS;
-    entry.count = 0;
-  }
-  passwordAttempts.set(key, entry);
-}
-
-function clearAttempts(key) {
-  passwordAttempts.delete(key);
-}
-
 function ensureRoomStructures(roomId) {
   if (!roomChannels.has(roomId)) {
     roomChannels.set(roomId, { text: [...DEFAULT_TEXT_CHANNELS], voice: [...DEFAULT_VOICE_CHANNELS] });
@@ -340,6 +300,8 @@ function broadcastUserList(roomId) {
       isOwner: !!s?.data.isOwner,
       isAdmin: !!s?.data.isAdmin,
       voiceChannel,
+      muted: !!s?.data.muted,
+      deafened: !!s?.data.deafened,
       isStreaming: voiceChannel ? (broadcasters.get(voiceChannel)?.has(id) || false) : false
     };
   });
@@ -409,9 +371,7 @@ function completeJoin(socket, roomId) {
   console.log(`[join] ${socket.id} (${socket.data.username}) entrou na sala "${roomId}"`);
 }
 
-// Tira um socket de uma sala sem desconectá-lo -- usado tanto quando ele
-// sai de propósito ('leave-room', pra trocar de servidor sem fechar o app)
-// quanto quando a conexão cai de vez (disconnect).
+// Tira um socket da sala -- usado quando a conexão cai de vez (disconnect).
 function removeFromRoom(socket, room) {
   leaveCurrentVoiceChannel(socket);
   socket.leave(room);
@@ -496,59 +456,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', (payload) => {
-    const { username, avatar, password, ownerToken, userToken } = payload || {};
-    // roomId nunca era validado/limpo aqui -- qualquer string (incluindo lixo
-    // tipo "[object Object]" vindo de um bug em outro lugar) virava o nome
-    // literal e permanente da sala, sem chance de correção.
-    const roomId = cleanName(payload?.roomId, MAX_NAME_LENGTH);
-    if (!roomId) {
-      socket.emit('join-error', { reason: 'invalid-room-name' });
-      return;
-    }
-
-    const isNewRoom = !rooms.has(roomId);
-    const attemptKey = `${socket.handshake.address}|${roomId}`;
-
-    if (!isNewRoom && roomPasswords.has(roomId)) {
-      if (isLockedOut(attemptKey)) {
-        console.log(`[join] ${socket.id} bloqueado por excesso de tentativas de senha na sala "${roomId}"`);
-        socket.emit('join-error', { reason: 'too-many-attempts' });
-        return;
-      }
-      if (!passwordMatches(password, roomPasswords.get(roomId))) {
-        registerFailedAttempt(attemptKey);
-        console.log(`[join] ${socket.id} (${username}) errou a senha da sala "${roomId}"`);
-        socket.emit('join-error', { reason: 'wrong-password' });
-        return;
-      }
-      clearAttempts(attemptKey);
-      if (isLegacyPasswordHash(roomPasswords.get(roomId))) {
-        roomPasswords.set(roomId, hashPassword(password));
-        markRoomDirty(roomId);
-      }
-    }
-
-    if (isNewRoom) {
-      rooms.set(roomId, new Set());
-      if (password) roomPasswords.set(roomId, hashPassword(password));
-      markRoomDirty(roomId);
-    }
-
-    finishJoin(socket, roomId, { username, avatar, ownerToken, userToken, isNewRoom });
-  });
-
-  // Sai da sala atual sem fechar a conexão -- pra trocar de servidor sem
-  // precisar fechar e reabrir o app inteiro (antes não existia jeito nenhum
-  // de fazer isso uma vez dentro de uma sala).
-  socket.on('leave-room', () => {
-    const room = socket.data.room;
-    if (!room) return;
-    removeFromRoom(socket, room);
-    socket.data.room = null;
-    socket.data.isOwner = false;
-    socket.data.isAdmin = false;
-    socket.data.voiceChannel = null;
-    console.log(`[leave-room] ${socket.id} (${socket.data.username}) saiu da sala "${room}"`);
+    const { username, avatar, ownerToken, userToken } = payload || {};
+    // Sala única: ignora qualquer nome de sala que o cliente mande
+    finishJoin(socket, FIXED_ROOM, { username, avatar, ownerToken, userToken, isNewRoom: false });
   });
 
   socket.on('rename-self', ({ newName }) => {
@@ -564,42 +474,6 @@ io.on('connection', (socket) => {
     if (!room) return;
     socket.data.avatar = sanitizeAvatar(avatar);
     broadcastUserList(room);
-  });
-
-  socket.on('rename-room', ({ newName }) => {
-    if (!socket.data.isOwner) {
-      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou renomear a sala sem ser dono`);
-      return;
-    }
-    const oldRoom = socket.data.room;
-    const trimmed = cleanName(newName, MAX_NAME_LENGTH);
-    if (!oldRoom || !trimmed || trimmed === oldRoom || rooms.has(trimmed)) return;
-
-    const memberIds = Array.from(rooms.get(oldRoom) || []);
-    memberIds.forEach(id => {
-      const s = io.sockets.sockets.get(id);
-      if (s) {
-        s.leave(oldRoom);
-        s.join(trimmed);
-        s.data.room = trimmed;
-      }
-    });
-
-    renameMapKey(rooms, oldRoom, trimmed);
-    renameMapKey(roomChannels, oldRoom, trimmed);
-    renameMapKey(roomVoiceMembers, oldRoom, trimmed);
-    renameMapKey(roomBroadcasters, oldRoom, trimmed);
-    renameMapKey(roomMessages, oldRoom, trimmed);
-    renameMapKey(roomPasswords, oldRoom, trimmed);
-    renameMapKey(roomOwnerTokens, oldRoom, trimmed);
-    renameMapKey(roomIcons, oldRoom, trimmed);
-    renameMapKey(roomAdminTokens, oldRoom, trimmed);
-    deleteRoomFromRedis(oldRoom); // a sala "velha" não existe mais sob esse nome
-    markRoomDirty(trimmed);
-
-    io.to(trimmed).emit('room-renamed', { newName: trimmed });
-    io.emit('rooms-update', getRoomList());
-    console.log(`[rename] ${socket.id} renomeou a sala "${oldRoom}" pra "${trimmed}"`);
   });
 
   // Dono define/troca o ícone da sala (mostrado na lista de salas e na barra
@@ -718,6 +592,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Mutado/ensurdecido -- só pra mostrar os ícones na lista do canal de voz
+  // (igual ao Discord); o áudio em si já é cortado no próprio cliente.
+  socket.on('set-voice-state', ({ muted, deafened } = {}) => {
+    socket.data.muted = muted === true;
+    socket.data.deafened = deafened === true;
+    if (socket.data.room) broadcastUserList(socket.data.room);
+  });
+
   socket.on('start-sharing', () => {
     const room = socket.data.room;
     const channel = socket.data.voiceChannel;
@@ -832,49 +714,6 @@ io.on('connection', (socket) => {
     console.log(`[admin] ${socket.data.username} removeu ${targetSocket.data.username} de administrador na sala "${room}"`);
   });
 
-  // Apagar a sala inteira -- irreversível, só o dono. Tira todo mundo de
-  // volta pro lobby e some com canais/mensagens/senha/ícone/admins, tanto da
-  // memória quanto do Redis (se configurado).
-  socket.on('delete-room', () => {
-    if (!socket.data.isOwner) {
-      console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou apagar a sala sem ser dono`);
-      return;
-    }
-    const room = socket.data.room;
-    if (!room || !rooms.has(room)) return;
-
-    // Avisa ANTES de tirar todo mundo da room do socket.io -- `io.to(room)`
-    // só alcança quem ainda está com `.join(room)` ativo, então emitir depois
-    // do `.leave()` faria o evento não chegar em ninguém.
-    io.to(room).emit('room-deleted');
-
-    const memberIds = Array.from(rooms.get(room));
-    memberIds.forEach(id => {
-      const s = io.sockets.sockets.get(id);
-      if (!s) return;
-      s.leave(room);
-      s.data.room = null;
-      s.data.isOwner = false;
-      s.data.isAdmin = false;
-      s.data.voiceChannel = null;
-    });
-
-    rooms.delete(room);
-    roomChannels.delete(room);
-    roomVoiceMembers.delete(room);
-    roomBroadcasters.delete(room);
-    roomMessages.delete(room);
-    roomPasswords.delete(room);
-    roomOwnerTokens.delete(room);
-    roomIcons.delete(room);
-    roomAdminTokens.delete(room);
-    dirtyRooms.delete(room);
-    deleteRoomFromRedis(room);
-
-    io.emit('rooms-update', getRoomList());
-    console.log(`[apaga-sala] ${socket.id} (${socket.data.username}) apagou a sala "${room}" pra sempre`);
-  });
-
   // Retransmissão de sinalização WebRTC (voz e compartilhamento de tela) --
   // só entre quem está na MESMA sala. Antes disso, `target` era só um
   // socket.id qualquer sem checar sala nenhuma: qualquer socket conectado
@@ -931,5 +770,10 @@ const PORT = process.env.PORT || 3000;
 // conexão -- sem isso, o primeiro socket a conectar sempre veria a lista de
 // salas ainda vazia mesmo se o banco já tivesse salas de verdade.
 loadRoomsFromRedis().then(() => {
+  if (!rooms.has(FIXED_ROOM)) {
+    rooms.set(FIXED_ROOM, new Set());
+    markRoomDirty(FIXED_ROOM);
+  }
+  ensureRoomStructures(FIXED_ROOM);
   server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 });

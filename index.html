@@ -65,9 +65,6 @@
         ::-webkit-scrollbar-track { background: #2b2d31; }
         ::-webkit-scrollbar-thumb { background: #404249; border-radius: 10px; }
 
-        .audio-mode-btn { flex: 1; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; border: 1px solid #404249; background: #2b2d31; color: #949ba4; cursor: pointer; transition: all 0.15s ease; text-align: center; }
-        .audio-mode-btn:hover { border-color: #4e5058; color: #dbdee1; }
-        .audio-mode-btn.active-mode { background: #5865f2; border-color: #7984f5; color: white; }
 
         input[type="range"].volume-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 999px; background: #404249; outline: none; cursor: pointer; }
         input[type="range"].volume-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #5865f2; cursor: pointer; border: 2px solid #ffffff; }
@@ -133,7 +130,7 @@
         .voice-member-row:hover { background: #35373c; color: #dbdee1; }
 
         /* Chat de texto */
-        .chat-message { position: relative; display: flex; gap: 16px; padding: 2px 16px; margin: 0 -16px; transition: background 0.05s ease; }
+        .chat-message { position: relative; display: flex; gap: 16px; padding: 2px 48px 2px 16px; transition: background 0.05s ease; }
         .chat-message:hover { background: #2e3035; }
         .chat-message .cm-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; }
         .chat-message .cm-header { display: flex; align-items: baseline; gap: 8px; }
@@ -172,8 +169,8 @@
 
         /* Bolinha verde de "online" no seu avatar, no painel fixo da sidebar (tipo Discord) */
         #own-user-avatar-wrap .avatar-wrap::after {
-            content: ''; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px;
-            border-radius: 50%; background: #23a55a; border: 2px solid #232428;
+            content: ''; position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px;
+            border-radius: 50%; background: #23a55a; border: 3px solid #232428;
         }
 
         /* Divisor entre as salas conhecidas e o botão de "entrar/criar sala" na barra de servidores */
@@ -191,6 +188,97 @@
         /* Botão vermelho de desconectar da chamada */
         .control-btn.leave-btn { background-color: #da373c; color: #fff; }
         .control-btn.leave-btn:hover { background-color: #a12828; }
+        /* ===== Componentes no estilo Discord ===== */
+        .splash-pulse { animation: splash-pulse 1.6s ease-in-out infinite; }
+        @keyframes splash-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        #connect-form:not(.hidden) { display: flex; }
+        #connection-status:not(.hidden) { display: flex; }
+        #user-settings:not(.hidden) { display: flex; }
+        #server-menu:not(.hidden) { display: flex; }
+
+        .channel-category { width: 100%; text-align: left; display: flex; align-items: center; gap: 2px; padding: 0 2px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: #949ba4; }
+        .channel-category:hover { color: #dbdee1; }
+        .channel-category.collapsed .category-chevron { transform: rotate(-90deg); }
+        .category-chevron { transition: transform 0.1s ease; }
+        .channel-item .ch-actions { display: none; margin-left: auto; color: #b5bac1; }
+        .channel-item:hover .ch-actions, .channel-item.active-channel .ch-actions { display: flex; }
+        .channel-item .ch-actions button:hover { color: #dbdee1; }
+
+        .voice-member-row .vm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .voice-member-row .vm-icons { display: flex; align-items: center; gap: 4px; color: #b5bac1; flex-shrink: 0; }
+        .live-badge { background: #da373c; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; padding: 0 5px; border-radius: 4px; text-transform: uppercase; flex-shrink: 0; }
+
+        .panel-icon-btn { width: 32px; height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #b5bac1; flex-shrink: 0; }
+        .panel-icon-btn:hover { background: #3d3e45; color: #dbdee1; }
+        .panel-icon-btn.is-off { color: #f23f43; }
+        .call-side-btn { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #f2f3f5; background: #2b2d31; }
+        .call-side-btn:hover { background: #404249; }
+
+        .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 2px; font-size: 14px; font-weight: 500; color: #b5bac1; text-align: left; }
+        .menu-item:hover { background: #5865f2; color: #fff; }
+        .menu-item-danger { color: #f23f43; }
+        .menu-item-danger:hover { background: #da373c; color: #fff; }
+        .role-check { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #b5bac1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .role-check.checked { background: #5865f2; border-color: #5865f2; }
+        .role-check.checked::after { content: '\2713'; color: #fff; font-size: 12px; font-weight: 700; }
+
+        /* Lista de membros */
+        .member-category { padding: 24px 8px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: #949ba4; }
+        .member-row { display: flex; align-items: center; gap: 12px; padding: 4px 8px; margin: 1px 0; border-radius: 4px; cursor: pointer; }
+        .member-row:hover { background: #35373c; }
+        .member-row .mr-name { font-size: 16px; font-weight: 500; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .member-row .mr-activity { font-size: 12px; color: #949ba4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .status-dot-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+        .profile-avatar::after { width: 26px !important; height: 26px !important; right: 2px !important; bottom: 2px !important; border-width: 6px !important; }
+        .status-dot-wrap::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; border-radius: 50%; background: #23a55a; border: 3px solid var(--status-border, #2b2d31); }
+
+        /* Cards dos participantes da chamada */
+        .voice-tiles { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; padding: 16px; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        .voice-tiles:empty { display: none; }
+        .voice-tiles.compact { flex: 0 0 auto; flex-wrap: nowrap; height: 116px; padding: 0 16px; overflow-x: auto; }
+        .voice-tile { position: relative; border-radius: 8px; background: #2b2d31; display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; width: min(420px, calc(50% - 8px)); overflow: hidden; }
+        .voice-tiles.compact .voice-tile { height: 100%; width: auto; flex-shrink: 0; }
+        .voice-tile .tile-avatar .avatar-badge { width: 80px; height: 80px; font-size: 28px; }
+        .voice-tiles.compact .voice-tile .tile-avatar .avatar-badge { width: 40px; height: 40px; font-size: 14px; }
+        .voice-tile:has(.speaking-ring) { box-shadow: inset 0 0 0 2px #23a55a; }
+        .voice-tile .avatar-badge.speaking-ring { box-shadow: none; }
+        .voice-tile-label { position: absolute; left: 8px; bottom: 8px; background: rgba(0,0,0,0.6); color: #fff; font-size: 14px; font-weight: 500; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); }
+        .voice-tile .live-badge { position: absolute; top: 8px; left: 8px; }
+        .voice-tile .tile-watch { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+
+        .btn-assistir, .btn-assistindo { background: #4e5058; color: #fff; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 3px; display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer; transition: background 0.15s ease; }
+        .btn-assistir:hover, .btn-assistindo:hover { background: #6d6f78; }
+        .voice-tiles.compact .btn-assistir, .voice-tiles.compact .btn-assistindo { font-size: 12px; padding: 4px 8px; }
+
+        /* Chat */
+        .chat-message.cm-group-start { margin-top: 17px; }
+        .chat-message .cm-gutter { width: 40px; flex-shrink: 0; display: flex; justify-content: center; }
+        .chat-message .cm-hover-time { font-size: 11px; color: #949ba4; opacity: 0; line-height: 22px; }
+        .chat-message:hover .cm-hover-time { opacity: 1; }
+        .chat-message .cm-name { cursor: pointer; }
+        .chat-message .cm-name:hover { text-decoration: underline; }
+        .chat-divider { display: flex; align-items: center; margin: 24px 16px 8px; font-size: 12px; font-weight: 600; color: #949ba4; }
+        .chat-divider::before, .chat-divider::after { content: ''; flex: 1; height: 1px; background: #3f4147; }
+        .chat-divider span { padding: 0 6px; }
+
+        /* Modal de compartilhar tela */
+        .screen-tab { color: #b5bac1; padding-bottom: 6px; border-bottom: 2px solid transparent; }
+        .screen-tab:hover { color: #dbdee1; }
+        .screen-tab.active { color: #fff; border-bottom-color: #5865f2; }
+        .screen-option { border: 2px solid transparent; border-radius: 8px; cursor: pointer; padding: 6px; background: #2b2d31; }
+        .screen-option:hover { background: #35373c; }
+        .screen-option.selected { border-color: #5865f2; }
+        .discord-switch { appearance: none; width: 40px; height: 24px; border-radius: 12px; background: #80848e; position: relative; cursor: pointer; transition: background 0.15s ease; flex-shrink: 0; }
+        .discord-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left 0.15s ease; }
+        .discord-switch:checked { background: #23a55a; }
+        .discord-switch:checked::after { left: 19px; }
+
+        /* Configurações de usuário */
+        .settings-nav-header { padding: 6px 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: #949ba4; }
+        .settings-nav-item { text-align: left; padding: 6px 10px; margin-bottom: 2px; border-radius: 4px; font-size: 16px; font-weight: 500; color: #b5bac1; }
+        .settings-nav-item:hover { background: #35373c; color: #dbdee1; }
+        .settings-nav-item.active { background: #404249; color: #fff; }
+        .settings-nav-separator { height: 1px; background: #3f4147; margin: 8px 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #4e5058; }
     </style>
 </head>
@@ -198,289 +286,303 @@
 
     <div id="app-version-badge" class="fixed bottom-1 right-2 text-[10px] text-zinc-600 pointer-events-none select-none z-10"></div>
 
-    <!-- MODAL DE CONEXÃO -->
-    <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-96 shadow-2xl flex flex-col gap-4 relative">
-            <button id="btn-close-connection-modal" class="hidden absolute top-4 right-4 text-zinc-500 hover:text-white" title="Fechar"><i class="ph ph-x text-lg"></i></button>
-            <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
-            <div id="discovery-status" class="text-sm text-yellow-500 flex items-center gap-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
-                <i class="ph ph-spinner-gap animate-spin"></i> Conectando ao servidor...
-            </div>
-            <input type="text" id="input-username" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite seu nome (Opcional)">
-
-            <!-- ESCOLHER/CRIAR SALA: sempre mostrado -- entrar sempre passa por
-                 aqui, pra ficar claro que dá pra escolher outro servidor. -->
-            <div id="full-room-section" class="border-t border-zinc-800 pt-4 mt-2">
-                <h3 class="text-sm font-semibold text-zinc-400 mb-2">Salas Ativas</h3>
-                <div id="rooms-list-container" class="flex flex-col gap-2 max-h-32 overflow-y-auto mb-4 bg-zinc-950 rounded-lg p-2 border border-zinc-800 min-h-[60px]"></div>
-                <div class="flex gap-2">
-                    <input type="text" id="input-new-room" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nome da nova sala" disabled>
-                    <button id="btn-create-room" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50" disabled>Entrar/Criar</button>
-                </div>
-                <input type="password" id="input-room-password" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm mt-2 focus:outline-none focus:border-blue-500" placeholder="Senha (opcional, só se quiser proteger a sala)" disabled>
-            </div>
+    <!-- TELA DE CARREGAMENTO / PRIMEIRO ACESSO (o app entra direto no servidor;
+         só pede o nome na primeira vez, igual ao Discord depois do login) -->
+    <div id="connection-modal" class="fixed inset-0 bg-[#313338] z-50 flex items-center justify-center">
+        <div id="connect-loading" class="flex flex-col items-center gap-5">
+            <img src="assets/logo.png" class="w-24 h-24 rounded-[24px] object-cover splash-pulse" alt="">
+            <div class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Conectando</div>
+            <div id="discovery-status" class="text-sm text-zinc-300 text-center max-w-xs">Conectando ao servidor...</div>
+        </div>
+        <div id="connect-form" class="hidden bg-[#313338] rounded-[5px] shadow-[0_2px_10px_rgba(0,0,0,0.2)] w-[480px] max-w-[90vw] p-8 flex-col">
+            <h2 class="text-2xl font-semibold text-zinc-100 text-center">Boas-vindas ao Quartonha!</h2>
+            <p class="text-base text-zinc-400 text-center mt-2 mb-5">Como a galera vai te chamar por aqui?</p>
+            <label for="input-username" class="text-xs font-bold uppercase tracking-wide text-zinc-300 mb-2">Nome de exibição <span class="text-red-400">*</span></label>
+            <input type="text" id="input-username" maxlength="40" class="w-full h-10 bg-zinc-950 rounded-[3px] px-2.5 text-base text-zinc-200 focus:outline-none" autocomplete="off">
+            <button id="btn-create-room" class="mt-5 h-11 w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-[3px] transition-colors">Entrar</button>
         </div>
     </div>
 
-    <!-- MODAL DEDICADO: pedir a senha de uma sala protegida (bem mais visível
-         que só um campo dentro do formulário de criar sala) -->
-    <div id="room-password-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-96 shadow-2xl flex flex-col gap-4">
-            <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-lock-simple text-amber-500"></i> Sala protegida por senha</h2>
-            <p class="text-sm text-zinc-400">A sala "<strong id="room-password-modal-name"></strong>" pede uma senha pra entrar.</p>
-            <form id="room-password-form" class="flex flex-col gap-3">
-                <input type="password" id="room-password-modal-input" autofocus class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Digite a senha">
-                <p id="room-password-modal-error" class="hidden text-xs text-red-400 flex items-center gap-1"><i class="ph ph-warning-circle"></i> Senha incorreta, tenta de novo.</p>
-                <div class="flex gap-2">
-                    <button type="button" id="btn-room-password-cancel" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium px-4 py-2 rounded-lg transition-colors">Cancelar</button>
-                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors">Entrar</button>
-                </div>
-            </form>
-        </div>
+    <!-- AVISO DE CONEXÃO PERDIDA (barra no topo, igual ao Discord) -->
+    <div id="connection-status" class="hidden fixed top-0 inset-x-0 z-40 h-9 bg-red-500 text-white text-sm font-medium items-center justify-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-white" id="status-dot"></div>
+        <span id="status-text">Conexão perdida. Tentando reconectar...</span>
     </div>
 
-    <!-- MODAL DE SELEÇÃO DE TELA -->
-    <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-[700px] max-w-[90vw] shadow-2xl">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-monitor text-blue-500"></i> Selecione o que compartilhar</h2>
-                <button id="btn-close-screen-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
-            </div>
-
-            <div class="mb-4">
-                <h3 class="text-sm font-semibold text-zinc-400 mb-2">Áudio a compartilhar</h3>
-                <div class="flex gap-2" id="audio-mode-options">
-                    <button type="button" data-mode="system" class="audio-mode-btn"><i class="ph ph-speaker-high block mb-1"></i>Áudio do Sistema</button>
-                    <button type="button" data-mode="none" class="audio-mode-btn active-mode"><i class="ph ph-speaker-slash block mb-1"></i>Sem Áudio</button>
+    <!-- COMPARTILHAR TELA ("Transmitir ao vivo") -->
+    <div id="screen-modal" class="fixed inset-0 bg-black/70 z-40 hidden items-center justify-center">
+        <div class="bg-[#313338] rounded-lg w-[720px] max-w-[92vw] shadow-2xl overflow-hidden flex flex-col">
+            <div class="px-4 pt-4 pb-3 flex items-start justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-zinc-100">Compartilhar tela</h2>
+                    <div class="flex gap-4 mt-3 text-sm font-medium" id="screen-tabs">
+                        <button type="button" data-tab="window" class="screen-tab active">Aplicativos</button>
+                        <button type="button" data-tab="screen" class="screen-tab">Telas inteiras</button>
+                    </div>
                 </div>
-                <p class="text-xs text-zinc-500 mt-2">Seu microfone já é transmitido pelo chat de voz da sala. Aqui você escolhe se quer compartilhar também o áudio do sistema (jogos, vídeos, música, etc.) junto com a tela.</p>
-                <p id="system-audio-warning" class="text-xs text-yellow-500 mt-2 hidden bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 flex items-start gap-2">
-                    <i class="ph ph-warning-circle text-sm mt-0.5 flex-shrink-0"></i>
-                    <span>Se você escolher uma <strong>janela específica</strong> (ex: um jogo), o app tenta capturar só o áudio dela — sem eco, sem precisar silenciar nada. Se escolher "Tela Cheia" (que pega tudo que toca no PC), o app silencia automaticamente o que <strong>você</strong> ouve dos outros enquanto isso estiver ligado, pra evitar eco (seu microfone continua normal).</span>
+                <button id="btn-close-screen-modal" class="text-zinc-400 hover:text-zinc-100" title="Fechar"><i class="ph ph-x text-2xl"></i></button>
+            </div>
+            <div id="sources-list" class="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[46vh] overflow-y-auto px-4 pb-4"></div>
+            <div class="bg-zinc-900 px-4 py-3 flex flex-col gap-2">
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-sm text-zinc-200 cursor-pointer select-none flex-1">
+                        <input type="checkbox" id="share-audio-toggle" class="discord-switch">
+                        Compartilhar áudio do aplicativo / sistema
+                    </label>
+                    <button type="button" id="btn-stream-quality" class="text-sm text-zinc-300 hover:underline flex items-center gap-1"><i class="ph ph-gear-six"></i> <span id="stream-quality-label">Qualidade: Automático</span></button>
+                </div>
+                <p id="system-audio-warning" class="text-xs text-zinc-400 hidden">
+                    Numa <strong class="text-zinc-200">janela específica</strong> (ex: um jogo), só o áudio dela é transmitido. Em <strong class="text-zinc-200">tela inteira</strong>, vai tudo que toca no PC, então o que você ouve dos outros fica no mudo enquanto isso (evita eco).
                 </p>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" id="btn-cancel-share" class="h-[38px] px-4 text-sm font-medium text-zinc-100 hover:underline">Cancelar</button>
+                    <button type="button" id="btn-go-live" class="h-[38px] px-4 rounded-[3px] bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>Transmitir</button>
+                </div>
             </div>
-
-            <div id="sources-list" class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto p-2"></div>
         </div>
     </div>
 
-    <!-- MODAL DE QUALIDADE DE VÍDEO -->
-    <div id="quality-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+    <!-- QUALIDADE DA TRANSMISSÃO -->
+    <div id="quality-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center">
+        <div class="bg-[#313338] p-4 rounded-lg w-[440px] max-w-[90vw] shadow-2xl flex flex-col gap-3">
             <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-gear-six text-blue-500"></i> Qualidade de Vídeo</h2>
-                <button id="btn-close-quality-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+                <h2 class="text-xl font-semibold text-zinc-100">Qualidade da transmissão</h2>
+                <button id="btn-close-quality-modal" class="text-zinc-400 hover:text-zinc-100"><i class="ph ph-x text-2xl"></i></button>
             </div>
-            <p class="text-xs text-zinc-500">"Automático" ajusta a qualidade sozinho conforme a sua internet. Você também pode fixar manualmente se preferir.</p>
+            <p class="text-sm text-zinc-400">"Automático" ajusta a qualidade sozinho conforme a sua internet. Você também pode fixar manualmente.</p>
             <div id="quality-options" class="flex flex-col gap-2"></div>
-            <div id="quality-current-info" class="text-xs text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center gap-2"></div>
+            <div id="quality-current-info" class="text-xs text-zinc-400 bg-zinc-900 rounded p-3 flex items-center gap-2"></div>
         </div>
     </div>
 
-    <!-- MODAL DE DISPOSITIVO DE SAÍDA DO CHAT DE VOZ -->
-    <div id="audio-output-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-waveform text-blue-500"></i> Saída do Chat de Voz</h2>
-                <button id="btn-close-audio-output-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
-            </div>
-            <p class="text-xs text-zinc-500">Escolha pra qual dispositivo mandar o áudio do chat de voz e das telas dos outros. Use um cabo de áudio virtual (ex: VB-Cable) se quiser compartilhar "Áudio do Sistema" sem que as vozes do app apareçam pra quem está assistindo.</p>
-            <div id="audio-output-options" class="flex flex-col gap-2 max-h-64 overflow-y-auto"></div>
+    <!-- CONFIGURAÇÕES DE USUÁRIO (tela cheia, igual ao Discord) -->
+    <div id="user-settings" class="hidden fixed inset-0 z-50 bg-[#313338]">
+        <div class="flex-1 flex justify-end bg-zinc-900">
+            <nav class="w-[218px] py-[60px] pr-1.5 pl-5 flex flex-col">
+                <div class="settings-nav-header">Configurações de usuário</div>
+                <button type="button" class="settings-nav-item active" data-settings-page="account">Minha conta</button>
+                <div class="settings-nav-separator"></div>
+                <div class="settings-nav-header">Configurações do aplicativo</div>
+                <button type="button" class="settings-nav-item" data-settings-page="voice">Voz e vídeo</button>
+            </nav>
         </div>
-    </div>
-
-    <div id="audio-input-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-microphone text-blue-500"></i> Microfone</h2>
-                <button id="btn-close-audio-input-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
+        <div class="flex-[1_1_800px] flex items-start overflow-y-auto">
+            <div class="w-[740px] max-w-full pt-[60px] pb-20 px-10">
+                <section data-settings-section="account">
+                    <h2 class="text-xl font-semibold text-zinc-100 mb-5">Minha conta</h2>
+                    <div class="bg-zinc-950 rounded-lg overflow-hidden">
+                        <div id="settings-banner" class="h-[100px] bg-blue-600"></div>
+                        <div class="px-4 pb-4 relative">
+                            <div class="flex items-end gap-4 -mt-[38px]">
+                                <div id="settings-avatar" class="p-[7px] bg-zinc-950 rounded-full"></div>
+                                <div class="pb-2 flex-1 min-w-0">
+                                    <div id="settings-name" class="text-xl font-semibold text-zinc-100 truncate"></div>
+                                </div>
+                                <button type="button" id="btn-settings-edit-profile" class="mb-2 h-8 px-4 rounded-[3px] bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium">Editar perfil</button>
+                            </div>
+                            <div class="mt-4 bg-zinc-900 rounded-lg p-4 flex items-center justify-between">
+                                <div>
+                                    <div class="text-xs font-bold uppercase tracking-wide text-zinc-400">Nome de exibição</div>
+                                    <div id="settings-name-row" class="text-base text-zinc-200"></div>
+                                </div>
+                                <button type="button" id="btn-own-name-edit" class="h-8 px-4 rounded-[3px] bg-zinc-600 hover:bg-zinc-500 text-white text-sm font-medium" onclick="window.startEditOwnName(event)">Editar</button>
+                            </div>
+                            <p class="text-xs text-zinc-400 mt-3">Clique na sua foto para trocar o avatar.</p>
+                        </div>
+                    </div>
+                </section>
+                <section data-settings-section="voice" class="hidden">
+                    <h2 class="text-xl font-semibold text-zinc-100 mb-5">Configurações de voz</h2>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-wide text-zinc-400 mb-2">Dispositivo de entrada</div>
+                            <div id="audio-input-options" class="flex flex-col gap-1.5"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-wide text-zinc-400 mb-2">Dispositivo de saída</div>
+                            <div id="audio-output-options" class="flex flex-col gap-1.5"></div>
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <div class="text-xs font-bold uppercase tracking-wide text-zinc-400 mb-3">Volume de saída</div>
+                        <input type="range" id="volume-slider" class="volume-slider" style="width: 100%;" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)">
+                    </div>
+                    <p class="text-sm text-zinc-400 mt-6">Use um cabo de áudio virtual (ex: VB-Cable) na saída se quiser transmitir o áudio do sistema sem que as vozes da chamada vazem pra quem está assistindo.</p>
+                </section>
             </div>
-            <p class="text-xs text-zinc-500">Escolha qual microfone usar no chat de voz. Troca na hora, mesmo já estando numa chamada.</p>
-            <div id="audio-input-options" class="flex flex-col gap-2 max-h-64 overflow-y-auto"></div>
+            <div class="pt-[60px] pr-5 flex-shrink-0">
+                <button type="button" id="btn-close-settings" class="flex flex-col items-center gap-1.5 text-zinc-400 hover:text-zinc-200 group">
+                    <span class="w-9 h-9 rounded-full border-2 border-current flex items-center justify-center"><i class="ph ph-x text-lg"></i></span>
+                    <span class="text-[13px] font-semibold">ESC</span>
+                </button>
+            </div>
         </div>
     </div>
 
     <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
     <div id="voice-audio-container" style="display:none"></div>
 
-    <!-- LAYOUT (estilo Discord): servidores | canais | conteúdo | membros -->
+    <!-- LAYOUT (igual ao Discord): servidores | canais | conteúdo | membros -->
     <main class="flex-1 flex min-h-0 relative">
 
-        <!-- BARRA DE SERVIDORES CONHECIDOS (troca rápida entre salas) -->
-        <aside id="server-rail" class="w-[72px] h-full bg-zinc-950 flex flex-col items-center flex-shrink-0 py-3 gap-2 overflow-y-auto hidden md:flex">
-            <img src="assets/logo.png" class="w-12 h-12 rounded-[16px] object-cover flex-shrink-0" alt="Streama AI" title="Streama AI">
+        <!-- BARRA DE SERVIDORES -->
+        <aside id="server-rail" class="w-[72px] h-full bg-zinc-950 flex flex-col items-center flex-shrink-0 pt-3 pb-3 gap-2 overflow-y-auto hidden md:flex">
+            <div class="relative w-full flex justify-center group">
+                <img src="assets/logo.png" class="w-12 h-12 rounded-[24px] group-hover:rounded-[16px] transition-all duration-150 object-cover flex-shrink-0" alt="Streama AI">
+            </div>
             <div class="server-rail-divider"></div>
             <div id="server-rail-list" class="flex flex-col gap-2 items-center w-full"></div>
-            <button id="btn-server-rail-add" class="w-12 h-12 rounded-[24px] bg-[#313338] text-emerald-500 hover:rounded-[16px] hover:bg-emerald-500 hover:text-white transition-all duration-150 flex items-center justify-center flex-shrink-0" title="Entrar em outra sala / criar nova">
-                <i class="ph ph-plus text-2xl"></i>
-            </button>
         </aside>
 
         <!-- SIDEBAR DE CANAIS -->
         <aside id="channels-sidebar" class="w-60 h-full bg-zinc-900 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="channel-topbar h-12 flex items-center gap-1 pl-4 pr-2 flex-shrink-0">
-                <h2 class="font-semibold text-[15px] text-zinc-100 truncate flex-1" id="server-name-label">Sala</h2>
-                <button id="btn-room-icon" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Trocar ícone da sala"><i class="ph ph-image text-lg"></i></button>
-                <button id="btn-rename-room" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-lg"></i></button>
-                <button id="btn-leave-room" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Sair da sala / trocar de servidor"><i class="ph ph-sign-out text-lg"></i></button>
+            <button type="button" id="server-header" class="channel-topbar h-12 flex items-center gap-1 px-4 flex-shrink-0 hover:bg-zinc-800 transition-colors text-left">
+                <h2 class="font-semibold text-base text-zinc-100 truncate flex-1" id="server-name-label">Quartonha</h2>
+                <i id="server-header-chevron" class="ph ph-caret-down text-lg text-zinc-200"></i>
+            </button>
+            <!-- MENU DO SERVIDOR (clique no nome, igual ao Discord) -->
+            <div id="server-menu" class="hidden absolute top-[52px] left-[82px] w-[220px] z-50 bg-[#111214] rounded p-2 flex-col shadow-2xl">
+                <button type="button" id="btn-room-icon" class="menu-item justify-between">Alterar ícone do servidor <i class="ph ph-image text-lg"></i></button>
+                <button type="button" id="btn-server-menu-profile" class="menu-item justify-between">Editar perfil do servidor <i class="ph ph-pencil-simple text-lg"></i></button>
+                <div class="h-px bg-zinc-800 my-1 mx-1"></div>
+                <button type="button" id="btn-server-menu-voice" class="menu-item justify-between">Configurações de voz <i class="ph ph-gear-six text-lg"></i></button>
             </div>
             <div class="flex-1 overflow-y-auto px-2 pt-4 flex flex-col gap-4">
                 <div>
-                    <div class="channel-category"><i class="ph ph-caret-down text-[10px]"></i> Canais de texto</div>
+                    <button type="button" class="channel-category" data-category="text"><i class="ph ph-caret-down text-[10px] category-chevron"></i> Canais de texto</button>
                     <div id="text-channels-list" class="flex flex-col"></div>
                 </div>
                 <div>
-                    <div class="channel-category"><i class="ph ph-caret-down text-[10px]"></i> Canais de voz</div>
+                    <button type="button" class="channel-category" data-category="voice"><i class="ph ph-caret-down text-[10px] category-chevron"></i> Canais de voz</button>
                     <div id="voice-channels-list" class="flex flex-col"></div>
                 </div>
             </div>
             <!-- PAINEL "VOZ CONECTADA" (só aparece numa chamada) -->
-            <div id="voice-status-bar" class="hidden bg-[#232428] border-b border-zinc-800 px-2 py-2 items-center gap-1 flex-shrink-0">
-                <div class="flex-1 min-w-0 px-1">
-                    <div class="flex items-center gap-1.5 text-emerald-500 font-semibold text-sm"><i class="ph-fill ph-cell-signal-full"></i> Voz conectada</div>
-                    <div class="text-xs text-zinc-400 truncate" id="voice-status-label"></div>
+            <div id="voice-status-bar" class="hidden bg-[#232428] border-b border-zinc-800 px-2 pt-2 pb-2 flex-col gap-2 flex-shrink-0">
+                <div class="flex items-center gap-1">
+                    <div class="flex-1 min-w-0 px-1">
+                        <div class="flex items-center gap-1.5 text-emerald-500 font-semibold text-sm"><i class="ph-fill ph-cell-signal-full"></i> Voz conectada</div>
+                        <div class="text-xs text-zinc-400 truncate" id="voice-status-label"></div>
+                    </div>
+                    <button id="btn-leave-voice-channel" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex-shrink-0" title="Desconectar"><i class="ph-fill ph-phone-disconnect text-xl"></i></button>
                 </div>
-                <button id="btn-leave-voice-channel" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex-shrink-0" title="Desconectar"><i class="ph-fill ph-phone-disconnect text-xl"></i></button>
+                <button type="button" id="btn-panel-share" class="h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 flex items-center justify-center" title="Compartilhar sua tela"><i class="ph-fill ph-screencast text-xl"></i></button>
             </div>
-            <!-- PAINEL DO USUÁRIO: sempre visível, não só durante uma call -->
+            <!-- PAINEL DO USUÁRIO -->
             <div class="relative flex-shrink-0 h-[52px] px-2 flex items-center gap-0.5 bg-[#232428]">
-                <div class="flex items-center gap-2 flex-1 min-w-0 pl-0.5 pr-1 py-1 rounded hover:bg-zinc-800 transition-colors">
+                <button type="button" id="own-user-block" class="flex items-center gap-2 flex-1 min-w-0 pl-0.5 pr-1 py-1 rounded hover:bg-zinc-800 transition-colors text-left">
                     <div id="own-user-avatar-wrap" class="flex-shrink-0"></div>
                     <div class="min-w-0 leading-tight">
                         <div id="own-user-name" class="text-sm font-semibold text-zinc-100 truncate">Você</div>
                         <div class="text-xs text-zinc-400">Online</div>
                     </div>
-                </div>
-                <button id="own-user-mic-icon" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Mutar/ativar seu microfone">
-                    <i class="ph ph-microphone text-xl"></i>
                 </button>
-                <button id="btn-deafen" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Silenciar tudo que você ouve">
-                    <i class="ph ph-headphones text-xl"></i>
-                </button>
-                <button id="btn-user-settings" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Configurações">
-                    <i class="ph ph-gear-six text-xl"></i>
-                </button>
-                <div id="user-settings-menu" class="hidden absolute bottom-[56px] left-2 right-2 z-50 bg-[#111214] rounded-lg shadow-2xl p-1.5 flex-col">
-                    <button id="btn-own-name-edit" type="button" class="menu-item" onclick="window.startEditOwnName(event)"><i class="ph ph-pencil-simple"></i> Mudar meu nome</button>
-                    <button id="btn-audio-input" type="button" class="menu-item"><i class="ph ph-microphone"></i> Microfone</button>
-                    <button id="btn-audio-output" type="button" class="menu-item"><i class="ph ph-speaker-high"></i> Saída de áudio</button>
-                </div>
+                <button id="own-user-mic-icon" class="panel-icon-btn" title="Silenciar"><i class="ph-fill ph-microphone text-xl"></i></button>
+                <button id="btn-deafen" class="panel-icon-btn" title="Desativar áudio"><i class="ph-fill ph-headphones text-xl"></i></button>
+                <button id="btn-user-settings" class="panel-icon-btn" title="Configurações de usuário"><i class="ph-fill ph-gear-six text-xl"></i></button>
             </div>
         </aside>
 
-        <!-- CONTEÚDO: CHAT DE TEXTO OU SALA DE VOZ -->
+        <!-- CONTEÚDO: CHAT DE TEXTO OU CANAL DE VOZ -->
         <div class="flex-1 h-full flex flex-col relative min-w-0 bg-[#313338]">
             <div class="channel-topbar h-12 flex-shrink-0 px-4 flex items-center gap-3 z-10">
                 <button id="btn-toggle-channels" class="md:hidden w-6 h-6 text-zinc-300 hover:text-zinc-100 flex items-center justify-center flex-shrink-0" title="Mostrar/ocultar lista de canais"><i class="ph ph-list text-2xl"></i></button>
                 <div id="channel-header" class="flex items-center gap-2 text-zinc-100 text-base font-semibold min-w-0 flex-1"></div>
-                <div id="connection-status" class="flex items-center gap-1.5 text-xs text-zinc-400 flex-shrink-0">
-                    <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
-                    <span id="status-text">Desconectado</span>
-                </div>
-                <button id="btn-toggle-participants" class="w-6 h-6 text-zinc-300 hover:text-zinc-100 flex items-center justify-center flex-shrink-0" title="Mostrar/ocultar lista de membros"><i class="ph-fill ph-users text-2xl"></i></button>
+                <button id="btn-toggle-participants" class="w-6 h-6 text-zinc-100 hover:text-zinc-100 flex items-center justify-center flex-shrink-0" title="Ocultar lista de membros"><i class="ph-fill ph-users text-2xl"></i></button>
             </div>
 
             <div id="text-chat-panel" class="hidden flex-1 flex-col min-h-0">
-                <div id="chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-4 px-4 pt-4 pb-2"></div>
+                <div id="chat-messages" class="flex-1 overflow-y-auto flex flex-col pt-4 pb-2"></div>
                 <div id="chat-image-preview" class="hidden items-center gap-2 mx-4 mb-1 bg-zinc-900 rounded-lg p-2 flex-shrink-0">
                     <img id="chat-image-preview-img" class="w-14 h-14 rounded object-cover flex-shrink-0" alt="">
                     <span class="text-xs text-zinc-400 flex-1">Imagem pronta pra enviar</span>
                     <button type="button" id="btn-chat-image-remove" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-800 flex-shrink-0" title="Remover imagem"><i class="ph ph-x text-sm"></i></button>
                 </div>
                 <form id="chat-input-form" class="mx-4 mb-6 mt-1 flex items-center bg-[#383a40] rounded-lg flex-shrink-0">
-                    <button type="button" id="btn-chat-attach-image" class="w-14 h-11 flex items-center justify-center text-zinc-300 hover:text-zinc-100 flex-shrink-0" title="Anexar imagem"><i class="ph-fill ph-plus-circle text-2xl"></i></button>
-                    <input id="chat-input" type="text" maxlength="2000" autocomplete="off" class="flex-1 min-w-0 bg-transparent py-2.5 pr-4 text-base text-zinc-200 placeholder-zinc-500 focus:outline-none" placeholder="Conversar... (Ctrl+V pra colar print)">
+                    <button type="button" id="btn-chat-attach-image" class="w-14 h-11 flex items-center justify-center text-zinc-300 hover:text-zinc-100 flex-shrink-0" title="Enviar imagem"><i class="ph-fill ph-plus-circle text-2xl"></i></button>
+                    <input id="chat-input" type="text" maxlength="2000" autocomplete="off" class="flex-1 min-w-0 bg-transparent py-2.5 pr-4 text-base text-zinc-200 placeholder-zinc-500 focus:outline-none" placeholder="Conversar">
                     <button type="submit" class="hidden" title="Enviar"></button>
                 </form>
             </div>
             <input type="file" id="chat-image-file-input" accept="image/*" class="hidden">
 
             <!-- LIGHTBOX: ver imagem do chat em tamanho grande -->
-            <div id="image-lightbox" class="hidden fixed inset-0 bg-black/90 backdrop-blur-sm z-50 items-center justify-center cursor-zoom-out">
+            <div id="image-lightbox" class="hidden fixed inset-0 bg-black/90 z-50 items-center justify-center cursor-zoom-out">
                 <img id="image-lightbox-img" class="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" alt="">
             </div>
 
             <div id="voice-panel-wrapper" class="flex-1 flex-col min-h-0 bg-black" style="display:none;">
-                <div id="voice-member-strip" class="flex flex-wrap gap-2 px-4 pt-4 flex-shrink-0"></div>
                 <div class="video-stage flex-1 min-h-0 p-4" id="main-video-wrapper">
                     <div class="video-status" id="empty-state"></div>
                     <div class="video-grid" id="video-grid"></div>
                 </div>
+                <!-- Participantes da chamada (cards grandes sem transmissão; fileira embaixo com transmissão) -->
+                <div id="voice-member-strip" class="voice-tiles"></div>
 
-                <!-- CONTROLES DA CHAMADA (dentro da própria chamada, como no Discord) -->
-                <div class="flex-shrink-0 flex items-center justify-center gap-3 pb-6 pt-2">
-                    <div class="flex items-center bg-zinc-900 rounded-full pr-4 h-14">
-                        <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)">
-                            <i class="ph ph-speaker-simple-slash text-xl"></i>
-                        </button>
-                        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)" style="width: 80px;">
-                    </div>
-                    <button class="control-btn disabled-btn" id="btn-mic" title="Entre em uma sala de voz para usar o microfone"><i class="ph ph-microphone text-2xl"></i></button>
-                    <button class="control-btn disabled-btn" id="btn-share" title="Compartilhar sua tela"><i class="ph ph-screencast text-2xl"></i></button>
-                    <button class="control-btn" id="btn-quality" title="Qualidade de Vídeo"><i class="ph ph-gear-six text-2xl"></i></button>
-                    <button class="control-btn" id="btn-fullscreen" title="Tela Cheia"><i class="ph ph-arrows-out text-2xl"></i></button>
+                <!-- CONTROLES DA CHAMADA -->
+                <div class="flex-shrink-0 relative flex items-center justify-center gap-3 pb-6 pt-3">
+                    <button class="control-btn disabled-btn" id="btn-share" title="Compartilhar sua tela"><i class="ph-fill ph-screencast text-2xl"></i></button>
+                    <button class="control-btn disabled-btn" id="btn-mic" title="Silenciar"><i class="ph-fill ph-microphone text-2xl"></i></button>
                     <button class="control-btn leave-btn disabled-btn" id="btn-leave" title="Desconectar"><i class="ph-fill ph-phone-disconnect text-2xl"></i></button>
+                    <div class="absolute right-4 bottom-6 flex items-center gap-2">
+                        <button class="call-side-btn" id="btn-quality" title="Qualidade da transmissão"><i class="ph-fill ph-gear-six text-xl"></i></button>
+                        <button class="call-side-btn" id="btn-fullscreen" title="Tela cheia"><i class="ph ph-arrows-out text-xl"></i></button>
+                    </div>
+                    <!-- "Desativar áudio" geral -- fica escondido, quem usa é o fone do painel do usuário -->
+                    <button class="hidden" id="btn-volume" title="Desativar áudio"></button>
                 </div>
             </div>
         </div>
 
-        <!-- LISTA DE MEMBROS (todo mundo na sala, não só quem tá em canal de voz) -->
+        <!-- LISTA DE MEMBROS (agrupada por cargo, igual ao Discord) -->
         <aside id="participants-panel" class="w-60 h-full bg-zinc-900 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="flex items-center px-4 pt-6 pb-1 flex-shrink-0">
-                <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-[0.02em] flex-1">Online — <span id="participants-count"></span></h2>
-                <button id="btn-close-participants" class="w-5 h-5 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 flex-shrink-0" title="Ocultar membros"><i class="ph ph-x text-sm"></i></button>
-            </div>
-            <div id="participants-list" class="flex-1 overflow-y-auto px-2 flex flex-col"></div>
+            <div id="participants-list" class="flex-1 overflow-y-auto px-2 pb-4 flex flex-col"></div>
         </aside>
 
     </main>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
 
-    <!-- MENU DE VOLUME POR USUÁRIO (CLIQUE COM O BOTÃO DIREITO) -->
-    <div id="user-volume-menu" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-3 w-56">
-        <div class="text-xs text-zinc-400 mb-2 truncate" id="user-volume-menu-name">Volume do usuário</div>
-        <div class="flex items-center gap-2">
-            <i class="ph ph-speaker-high text-zinc-400 flex-shrink-0"></i>
-            <input type="range" id="user-volume-slider" min="0" max="200" value="100" class="volume-slider flex-1">
-            <span id="user-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
+    <!-- MENU DE CONTEXTO DE UM MEMBRO (BOTÃO DIREITO) -->
+    <div id="user-volume-menu" class="hidden fixed z-50 bg-[#111214] rounded p-2 w-[220px] shadow-2xl">
+        <button type="button" id="user-volume-menu-profile" class="menu-item">Perfil</button>
+        <div class="h-px bg-zinc-800 my-1 mx-1"></div>
+        <div class="px-2 pt-1.5 pb-2">
+            <div class="text-sm font-medium text-zinc-300 mb-2" id="user-volume-menu-name">Volume do usuário</div>
+            <div class="flex items-center gap-2">
+                <input type="range" id="user-volume-slider" min="0" max="200" value="100" class="volume-slider flex-1">
+                <span id="user-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
+            </div>
         </div>
-        <div class="border-t border-zinc-800 mt-2 pt-2 flex flex-col gap-1">
-            <button id="user-volume-menu-admin" type="button" class="w-full flex items-center gap-2 text-blue-400 hover:bg-blue-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors">
-                <i class="ph ph-shield-star"></i> <span id="user-volume-menu-admin-label">Tornar administrador</span>
+        <div>
+            <div class="h-px bg-zinc-800 my-1 mx-1"></div>
+            <button id="user-volume-menu-admin" type="button" class="menu-item justify-between">
+                <span id="user-volume-menu-admin-label">Cargo: Administrador</span>
+                <span id="user-volume-menu-admin-check" class="role-check"></span>
             </button>
-            <button id="user-volume-menu-kick" type="button" class="w-full flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors">
-                <i class="ph ph-sign-out"></i> Expulsar da sala
-            </button>
+            <button id="user-volume-menu-kick" type="button" class="menu-item menu-item-danger">Expulsar</button>
         </div>
     </div>
 
-    <!-- POPUP GENÉRICO DE RENOMEAR (nome, sala, canais) -->
-    <div id="rename-popup" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-3 w-64">
-        <div class="text-xs text-zinc-400 mb-2" id="rename-popup-label">Renomear</div>
-        <form id="rename-popup-form" class="flex gap-2">
-            <input id="rename-popup-input" type="text" maxlength="40" class="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-blue-500">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded px-3 text-sm flex-shrink-0">OK</button>
+    <!-- PERFIL DO MEMBRO (clique no nome/avatar, igual ao Discord) -->
+    <div id="profile-popout" class="hidden fixed z-50 w-[300px] bg-[#232428] rounded-lg shadow-2xl overflow-hidden"></div>
+
+    <!-- POPUP GENÉRICO DE RENOMEAR (nome, canais) -->
+    <div id="rename-popup" class="hidden fixed z-50 bg-[#313338] rounded-lg shadow-2xl p-4 w-72">
+        <div class="text-xs font-bold uppercase tracking-wide text-zinc-300 mb-2" id="rename-popup-label">Renomear</div>
+        <form id="rename-popup-form" class="flex flex-col gap-3">
+            <input id="rename-popup-input" type="text" maxlength="40" class="w-full h-10 bg-zinc-950 rounded-[3px] px-2.5 text-base text-zinc-200 focus:outline-none">
+            <button type="submit" class="h-[38px] bg-blue-600 hover:bg-blue-500 text-white rounded-[3px] text-sm font-medium">Salvar</button>
         </form>
     </div>
 
-    <!-- TOOLTIP DA BARRA DE SERVIDORES (hover no ícone -- nome + quem tá online, tipo Discord) -->
-    <div id="server-rail-tooltip" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl px-3 py-2 pointer-events-none max-w-[220px]">
-        <div class="text-sm font-semibold text-zinc-100 truncate" id="server-rail-tooltip-name"></div>
-        <div class="text-xs text-zinc-400 mt-1 flex flex-col gap-0.5" id="server-rail-tooltip-members"></div>
+    <!-- TOOLTIP DA BARRA DE SERVIDORES -->
+    <div id="server-rail-tooltip" class="hidden fixed z-50 bg-[#111214] rounded-md shadow-2xl px-3 py-2 pointer-events-none max-w-[220px]">
+        <div class="text-base font-semibold text-zinc-100 truncate" id="server-rail-tooltip-name"></div>
+        <div class="hidden" id="server-rail-tooltip-members"></div>
     </div>
 
-    <!-- MENU DE CONTEXTO (BOTÃO DIREITO) DA BARRA DE SERVIDORES -->
-    <div id="server-rail-context-menu" class="hidden fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-1.5 w-56">
-        <button id="server-rail-context-remove" type="button" class="w-full flex items-center gap-2 text-zinc-300 hover:bg-zinc-800 rounded px-2 py-1.5 text-xs font-medium transition-colors text-left">
-            <i class="ph ph-x-circle"></i> Remover da minha lista
-        </button>
-        <button id="server-rail-context-delete" type="button" class="hidden w-full flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded px-2 py-1.5 text-xs font-medium transition-colors text-left">
-            <i class="ph ph-trash"></i> Apagar sala (todos os dados)
-        </button>
-    </div>
-
-    <!-- INPUT OCULTO PARA TROCAR O AVATAR (clique no seu próprio avatar) -->
+    <!-- INPUTS OCULTOS PARA TROCAR O AVATAR E O ÍCONE DO SERVIDOR -->
     <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
     <input type="file" id="room-icon-file-input" accept="image/*" class="hidden">
 
@@ -531,13 +633,30 @@
             const discoveryStatus = document.getElementById('discovery-status');
             const inputUsername = document.getElementById('input-username');
             inputUsername.value = localStorage.getItem('ssp-username') || '';
-            const inputNewRoom = document.getElementById('input-new-room');
-            inputNewRoom.value = localStorage.getItem('ssp-last-room') || '';
+
             let myAvatar = localStorage.getItem('ssp-avatar') || null;
             let amIOwner = false; // sou o dono da sala atual? (só o dono pode expulsar/renomear)
             let hasEnteredRoom = false; // já passei pela entrada dessa conexão? evita repetir a transição de UI a cada channels-info (ex: depois de renomear um canal)
             const btnCreateRoom = document.getElementById('btn-create-room');
-            const inputRoomPassword = document.getElementById('input-room-password');
+
+            // Cargos (igual aos cargos coloridos do Discord): dono e administrador
+            const ROLES = {
+                owner: { name: 'Dono', color: '#f1c40f' },
+                admin: { name: 'Administrador', color: '#3498db' },
+            };
+            function rolesOf(user) {
+                const list = [];
+                if (user?.isOwner) list.push(ROLES.owner);
+                if (user?.isAdmin) list.push(ROLES.admin);
+                return list;
+            }
+            function roleColor(user) {
+                const top = rolesOf(user)[0];
+                return top ? top.color : null;
+            }
+            function findUser(userId) {
+                return (window._users || []).find(u => u.id === userId) || null;
+            }
             const btnFullscreen = document.getElementById('btn-fullscreen');
             const videoWrapper = document.getElementById('main-video-wrapper');
 
@@ -578,7 +697,7 @@
             // + anel verde de "falando" tipo Discord)
             // ==========================================
             function avatarHtml(user, sizeClass, editable) {
-                const textSize = sizeClass === 'w-6 h-6' ? 'text-[10px]' : 'text-xs';
+                const textSize = sizeClass === 'w-6 h-6' ? 'text-[10px]' : sizeClass === 'w-20 h-20' ? 'text-3xl' : 'text-sm';
                 const inner = user.avatar
                     // escapeHtml aqui é defesa-em-profundidade -- o servidor já valida
                     // que avatar é um data:image/...;base64,... de verdade (o alfabeto
@@ -684,7 +803,7 @@
                 try {
                     const icon = await resizeImageToDataUrl(file);
                     socket.emit('update-room-icon', { icon });
-                    showToast('Sala', 'Ícone da sala atualizado.');
+                    showToast('Servidor', 'Ícone do servidor atualizado.');
                 } catch (e) {
                     showToast('Erro', 'Não foi possível usar essa imagem.', 'error');
                 }
@@ -1004,15 +1123,7 @@
                 }
             }
 
-            document.getElementById('btn-audio-output').addEventListener('click', () => {
-                renderAudioOutputOptions();
-                document.getElementById('audio-output-modal').classList.remove('hidden');
-                document.getElementById('audio-output-modal').classList.add('flex');
-            });
-            document.getElementById('btn-close-audio-output-modal').addEventListener('click', () => {
-                document.getElementById('audio-output-modal').classList.add('hidden');
-                document.getElementById('audio-output-modal').classList.remove('flex');
-            });
+
 
             async function renderAudioInputOptions() {
                 const container = document.getElementById('audio-input-options');
@@ -1046,14 +1157,33 @@
                 }
             }
 
-            document.getElementById('btn-audio-input').addEventListener('click', () => {
-                renderAudioInputOptions();
-                document.getElementById('audio-input-modal').classList.remove('hidden');
-                document.getElementById('audio-input-modal').classList.add('flex');
-            });
-            document.getElementById('btn-close-audio-input-modal').addEventListener('click', () => {
-                document.getElementById('audio-input-modal').classList.add('hidden');
-                document.getElementById('audio-input-modal').classList.remove('flex');
+            // ==========================================
+            // CONFIGURAÇÕES DE USUÁRIO (tela cheia, igual ao Discord)
+            // ==========================================
+            const userSettingsEl = document.getElementById('user-settings');
+            function renderSettingsAccount() {
+                const me = findUser(socket.id);
+                const name = me ? me.name : (inputUsername.value || 'Participante');
+                document.getElementById('settings-name').textContent = name;
+                document.getElementById('settings-name-row').textContent = name;
+                document.getElementById('settings-avatar').innerHTML = avatarHtml({ id: socket.id || 'me', name, avatar: myAvatar }, 'w-20 h-20', true);
+            }
+            function showSettingsPage(page) {
+                document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.toggle('active', b.dataset.settingsPage === page));
+                document.querySelectorAll('[data-settings-section]').forEach(sec => sec.classList.toggle('hidden', sec.dataset.settingsSection !== page));
+                if (page === 'account') renderSettingsAccount();
+                if (page === 'voice') { renderAudioInputOptions(); renderAudioOutputOptions(); }
+            }
+            function openUserSettings(page = 'account') {
+                userSettingsEl.classList.remove('hidden');
+                showSettingsPage(page);
+            }
+            function closeUserSettings() { userSettingsEl.classList.add('hidden'); }
+            document.querySelectorAll('.settings-nav-item').forEach(b => b.addEventListener('click', () => showSettingsPage(b.dataset.settingsPage)));
+            document.getElementById('btn-close-settings').addEventListener('click', closeUserSettings);
+            document.getElementById('btn-settings-edit-profile').addEventListener('click', (e) => window.startEditOwnName(e));
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !userSettingsEl.classList.contains('hidden')) closeUserSettings();
             });
 
             function applyGainForUser(peerId) {
@@ -1161,7 +1291,18 @@
             // Roda num AudioContext PRÓPRIO (não o `audioCtx` geral, usado pra
             // GainNode/analyser) porque o RNNoise assume 48kHz -- e o `audioCtx` geral
             // não força nenhuma taxa específica.
-            async function ensureDenoisedMicStream() {
+            // Entrar na chamada e conectar com quem já está nela pediam o microfone
+            // ao mesmo tempo: cada chamada criava o seu AudioContext e a segunda
+            // sobrescrevia o `denoiseCtx` da primeira no meio do caminho -- o
+            // RNNoise falhava ("node name ... is not defined") e caía pro
+            // microfone cru. Agora todo mundo espera a mesma montagem.
+            let denoisedMicPromise = null;
+            function ensureDenoisedMicStream() {
+                if (!denoisedMicPromise) denoisedMicPromise = buildDenoisedMicStream().finally(() => { denoisedMicPromise = null; });
+                return denoisedMicPromise;
+            }
+
+            async function buildDenoisedMicStream() {
                 const raw = await ensureMicStream();
                 if (!raw) return null;
                 if (outgoingVoiceStream) return outgoingVoiceStream;
@@ -1364,19 +1505,17 @@
 
             function updateMicIcon() {
                 const btnMic = document.getElementById('btn-mic');
-                if (isMicMuted) {
-                    btnMic.innerHTML = '<i class="ph ph-microphone-slash text-xl"></i>';
-                    btnMic.classList.add('danger-state');
-                } else {
-                    btnMic.innerHTML = '<i class="ph ph-microphone text-xl"></i>';
-                    btnMic.classList.remove('danger-state');
-                }
+                const micIconHtml = isMicMuted ? '<i class="ph-fill ph-microphone-slash text-2xl"></i>' : '<i class="ph-fill ph-microphone text-2xl"></i>';
+                btnMic.innerHTML = micIconHtml;
+                btnMic.classList.toggle('danger-state', isMicMuted);
+                btnMic.title = isMicMuted ? 'Reativar microfone' : 'Silenciar';
                 const ownMicIcon = document.getElementById('own-user-mic-icon');
                 if (ownMicIcon) {
-                    ownMicIcon.innerHTML = isMicMuted ? '<i class="ph ph-microphone-slash text-xl"></i>' : '<i class="ph ph-microphone text-xl"></i>';
-                    ownMicIcon.classList.toggle('text-red-400', isMicMuted);
-                    ownMicIcon.classList.toggle('text-zinc-300', !isMicMuted);
+                    ownMicIcon.innerHTML = micIconHtml.replace('text-2xl', 'text-xl');
+                    ownMicIcon.classList.toggle('is-off', isMicMuted);
+                    ownMicIcon.title = btnMic.title;
                 }
+                sendVoiceState();
             }
 
             // Bloco fixo do usuário na sidebar esquerda -- nome/avatar/mic sempre
@@ -1390,6 +1529,7 @@
                 const name = me ? me.name : (inputUsername.value || 'Participante');
                 nameEl.textContent = name;
                 avatarWrap.innerHTML = avatarHtml({ id: socket.id || 'me', name, avatar: myAvatar }, 'w-8 h-8', false);
+                if (!document.getElementById('user-settings').classList.contains('hidden')) renderSettingsAccount();
             }
 
             async function toggleMic() {
@@ -1397,14 +1537,18 @@
                 if (!micStream && !isMicMuted) await ensureMicStream();
                 if (micStream) micStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
                 updateMicIcon();
-                showToast('Microfone', isMicMuted ? 'Seu microfone foi silenciado.' : 'Seu microfone foi ativado.');
+
             }
             document.getElementById('btn-mic').addEventListener('click', toggleMic);
-            // Igual o Discord: o mic no seu próprio card na sidebar também muta/ativa
-            // -- mais intuitivo que só ter o botão lá embaixo no rodapé.
-            document.getElementById('own-user-mic-icon').addEventListener('click', () => {
-                if (!document.getElementById('btn-mic').classList.contains('disabled-btn')) toggleMic();
-            });
+            // Igual ao Discord: dá pra silenciar pelo painel do usuário a qualquer
+            // momento, mesmo fora de uma chamada (vale pra próxima que entrar).
+            document.getElementById('own-user-mic-icon').addEventListener('click', toggleMic);
+
+            // Avisa o servidor se estou silenciado/sem áudio -- só pros ícones na
+            // lista do canal de voz dos outros (igual ao Discord).
+            function sendVoiceState() {
+                if (socket.connected) socket.emit('set-voice-state', { muted: isMicMuted, deafened: isMuted });
+            }
 
 
             // ==========================================
@@ -1421,7 +1565,8 @@
                 volumeMenuPeerId = peerId;
                 volumeMenuPeerName = peerName;
                 volumeMenuPeerIsAdmin = !!isPeerAdmin;
-                document.getElementById('user-volume-menu-name').textContent = `Volume de ${peerName}`;
+                document.getElementById('user-volume-menu-name').textContent = 'Volume do usuário';
+                document.getElementById('user-volume-menu-kick').textContent = `Expulsar ${peerName}`;
                 const pct = Math.round((userVolumes[peerId] ?? 1.0) * 100);
                 userVolumeSlider.value = pct;
                 userVolumeValue.textContent = pct + '%';
@@ -1429,9 +1574,9 @@
                 // Só o dono promove/remove admin -- um admin não pode promover outro
                 // admin nem a si mesmo, isso fica só com quem criou a sala.
                 document.getElementById('user-volume-menu-admin').classList.toggle('hidden', !amIOwner);
-                document.getElementById('user-volume-menu-admin-label').textContent = volumeMenuPeerIsAdmin ? 'Remover administrador' : 'Tornar administrador';
+                document.getElementById('user-volume-menu-admin-check').classList.toggle('checked', volumeMenuPeerIsAdmin);
 
-                const menuWidth = 224, menuHeight = amIOwner ? 168 : 76;
+                const menuWidth = 220, menuHeight = amIOwner ? 200 : 110;
                 userVolumeMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
                 userVolumeMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
                 userVolumeMenu.classList.remove('hidden');
@@ -1452,6 +1597,14 @@
                 if (!confirm(`Expulsar ${name} da sala?`)) return;
                 socket.emit('kick-user', { userId: peerId });
                 showToast('Participante', `${name} foi expulso da sala.`);
+            });
+
+            document.getElementById('user-volume-menu-profile').addEventListener('click', (e) => {
+                const peerId = volumeMenuPeerId;
+                const rect = userVolumeMenu.getBoundingClientRect();
+                e.stopPropagation();
+                closeUserVolumeMenu();
+                if (peerId) openProfilePopout(peerId, rect.left, rect.top);
             });
 
             document.getElementById('user-volume-menu-admin').addEventListener('click', () => {
@@ -1525,10 +1678,7 @@
                 }
             });
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    closeRenamePopup();
-                    closeRoomPasswordPrompt();
-                }
+                if (e.key === 'Escape') closeRenamePopup();
             });
 
             window.startEditOwnName = function (e) {
@@ -1542,21 +1692,30 @@
                 });
             };
 
-            document.getElementById('btn-rename-room').addEventListener('click', (e) => {
+            // Menu do servidor (clique no nome do servidor, igual ao Discord)
+            const serverMenu = document.getElementById('server-menu');
+            function setServerMenuOpen(open) {
+                serverMenu.classList.toggle('hidden', !open);
+                document.getElementById('server-header-chevron').className = open ? 'ph ph-x text-lg text-zinc-200' : 'ph ph-caret-down text-lg text-zinc-200';
+            }
+            document.getElementById('server-header').addEventListener('click', (e) => {
                 e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                openRenamePopup('Nome da sala', currentRoom || '', rect.left, rect.bottom + 6, (newName) => {
-                    socket.emit('rename-room', { newName });
-                });
+                setServerMenuOpen(serverMenu.classList.contains('hidden'));
             });
+            // capture: fecha antes do clique chegar no item
+            serverMenu.addEventListener('click', () => setServerMenuOpen(false), true);
+            document.addEventListener('click', (e) => {
+                if (!serverMenu.classList.contains('hidden') && !serverMenu.contains(e.target)) setServerMenuOpen(false);
+            });
+            document.getElementById('btn-server-menu-profile').addEventListener('click', (e) => window.startEditOwnName(e));
+            document.getElementById('btn-server-menu-voice').addEventListener('click', () => openUserSettings('voice'));
 
-            // Sair da sala atual e voltar pro seletor de salas -- antes disso não
-            // existia nenhum jeito de trocar de servidor sem fechar o app inteiro.
-            document.getElementById('btn-leave-room').addEventListener('click', (e) => {
-                e.stopPropagation();
-                socket.emit('leave-room');
-                returnToLobby();
-                showFullRoomPicker();
+            // Categorias de canais recolhíveis (clique em "CANAIS DE TEXTO")
+            document.querySelectorAll('.channel-category').forEach(cat => {
+                cat.addEventListener('click', () => {
+                    const collapsed = cat.classList.toggle('collapsed');
+                    cat.nextElementSibling.style.display = collapsed ? 'none' : '';
+                });
             });
 
             window.startEditChannelName = function (e, type, oldName) {
@@ -1709,9 +1868,9 @@
             // RENDERIZAÇÃO DA SIDEBAR DE CANAIS
             // ==========================================
             function renderChannelSidebar() {
-                document.getElementById('server-name-label').textContent = currentRoom || 'Sala';
-                document.getElementById('btn-rename-room').classList.toggle('hidden', !amIOwner);
+                document.getElementById('server-name-label').textContent = currentRoom || 'Quartonha';
                 document.getElementById('btn-room-icon').classList.toggle('hidden', !amIOwner);
+                const canEditChannels = amIOwner || !!findUser(socket.id)?.isAdmin;
 
                 const textList = document.getElementById('text-channels-list');
                 textList.innerHTML = '';
@@ -1720,7 +1879,7 @@
                     div.className = 'channel-item group' + (viewingType === 'text' && viewingChannel === ch ? ' active-channel' : '');
                     div.innerHTML = `
                         <i class="ph ph-hash ch-icon"></i><span class="truncate flex-1">${escapeHtml(ch)}</span>
-                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${amIOwner ? '' : 'hidden'}" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                        <span class="ch-actions ${canEditChannels ? '' : '!hidden'}"><button title="Editar canal"><i class="ph-fill ph-gear-six text-base"></i></button></span>
                     `;
                     div.addEventListener('click', () => viewTextChannel(ch));
                     div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'text', ch));
@@ -1736,7 +1895,7 @@
                     div.className = 'channel-item group' + (viewingType === 'voice' && viewingChannel === ch ? ' active-channel' : '');
                     div.innerHTML = `
                         <i class="ph ph-speaker-high ch-icon"></i><span class="truncate flex-1">${escapeHtml(ch)}</span>
-                        <button class="text-zinc-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${amIOwner ? '' : 'hidden'}" title="Renomear canal"><i class="ph ph-pencil-simple text-xs"></i></button>
+                        <span class="ch-actions ${canEditChannels ? '' : '!hidden'}"><button title="Editar canal"><i class="ph-fill ph-gear-six text-base"></i></button></span>
                     `;
                     div.addEventListener('click', () => joinVoiceChannel(ch));
                     div.querySelector('button').addEventListener('click', (e) => window.startEditChannelName(e, 'voice', ch));
@@ -1746,34 +1905,25 @@
                         const isSelf = m.id === socket.id;
                         const row = document.createElement('div');
                         row.className = 'voice-member-row';
-                        const micIcon = isSelf ? (isMicMuted ? 'ph-microphone-slash' : 'ph-microphone') : 'ph-microphone';
-
-                        // Quem tá transmitindo tela mostra um selo "AO VIVO"/"ASSISTINDO"
-                        // bem aqui -- é por aqui que dá pra entrar na stream de alguém,
-                        // sem precisar de um painel de participantes separado só pra isso.
-                        let liveHtml = '';
-                        if (m.isStreaming && !isSelf) {
-                            const watching = selectedStreamers.has(m.id);
-                            liveHtml = watching
-                                ? `<button class="btn-assistindo" onclick="event.stopPropagation(); window.toggleWatch('${m.id}')" title="Clique para parar de assistir"><i class="ph-fill ph-eye text-xs"></i></button>`
-                                : `<button class="btn-assistir" onclick="event.stopPropagation(); window.toggleWatch('${m.id}')" title="Clique para assistir"><i class="ph-fill ph-play-circle text-xs"></i></button>`;
-                        } else if (m.isStreaming && isSelf) {
-                            liveHtml = '<span class="text-red-500 text-[9px] font-bold flex-shrink-0" style="animation: pulse-ring 1.5s infinite;">SUA TELA</span>';
-                        }
-
+                        const muted = isSelf ? isMicMuted : m.muted;
+                        const deafened = isSelf ? isMuted : m.deafened;
                         row.innerHTML = `
-                            ${avatarHtml(m, 'w-6 h-6', isSelf)}
-                            <span class="truncate flex-1">${escapeHtml(m.name)}${isSelf ? ' (Você)' : ''}</span>
-                            ${m.isAdmin ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>' : ''}
-                            ${liveHtml}
-                            <i class="ph ${micIcon} text-[11px] flex-shrink-0"></i>
+                            ${avatarHtml(m, 'w-6 h-6', false)}
+                            <span class="vm-name">${escapeHtml(m.name)}</span>
+                            <span class="vm-icons">
+                                ${m.isStreaming ? '<span class="live-badge">Ao vivo</span>' : ''}
+                                ${muted ? '<i class="ph-fill ph-microphone-slash text-base" title="Silenciado"></i>' : ''}
+                                ${deafened ? '<i class="ph-fill ph-speaker-simple-slash text-base" title="Áudio desativado"></i>' : ''}
+                            </span>
                         `;
-                        if (!isSelf) {
-                            row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                            attachVolumeContextMenu(row, m.id, m.name, m.isAdmin);
-                            if (m.isStreaming) row.style.cursor = 'pointer';
-                            if (m.isStreaming) row.addEventListener('click', () => window.toggleWatch(m.id));
-                        }
+                        // Clique: abre a transmissão de quem está ao vivo; senão, o perfil
+                        row.style.cursor = 'pointer';
+                        row.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (m.isStreaming && !isSelf) window.toggleWatch(m.id);
+                            else openProfilePopout(m.id, e.clientX + 8, e.clientY);
+                        });
+                        if (!isSelf) attachVolumeContextMenu(row, m.id, m.name, m.isAdmin);
                         voiceList.appendChild(row);
                     });
                 });
@@ -1805,7 +1955,8 @@
                     document.getElementById('chat-input').placeholder = `Conversar em #${viewingChannel || ''}`;
                     // Canal de texto: neutro, ícone de #. Sem cor de "ao vivo" --
                     // precisa ficar visualmente diferente de um canal de voz.
-                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-500"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
+                    channelHeaderEl.parentElement.style.background = '';
+                    channelHeaderEl.innerHTML = `<i class="ph ph-hash text-2xl text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderChatMessages();
                 } else if (viewingType === 'voice') {
                     textChatPanel.classList.add('hidden');
@@ -1814,10 +1965,8 @@
                     // Canal de voz: quando de fato conectado (mesh de áudio ativo),
                     // fica verde com um selo "AO VIVO" -- não dá pra confundir com
                     // só estar navegando/visualizando o canal sem ter entrado.
-                    const connectedHere = myVoiceChannel === viewingChannel;
-                    channelHeaderEl.innerHTML = connectedHere
-                        ? `<span class="live-dot-green"></span><i class="ph-fill ph-speaker-high text-emerald-400"></i> <span class="text-emerald-400">${escapeHtml(viewingChannel || '')}</span><span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5 ml-1 tracking-wide">AO VIVO</span>`
-                        : `<i class="ph ph-speaker-high text-zinc-500"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
+                    channelHeaderEl.parentElement.style.background = '#000';
+                    channelHeaderEl.innerHTML = `<i class="ph ph-speaker-high text-2xl text-zinc-400"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
                     renderVoiceMemberStrip();
                     renderVoiceStagePlaceholder();
                 }
@@ -1826,34 +1975,41 @@
             // Um único estado central por vez no palco de vídeo: "entrar na
             // chamada" (não conectado ainda) ou "pronto, ninguém sendo assistido"
             // (conectado). Antes essas duas mensagens apareciam juntas.
+            // Palco da chamada (igual ao Discord): sem estar conectado, mostra o
+            // convite pra entrar; conectado sem ninguém transmitindo, os cards dos
+            // participantes ocupam a tela toda; assistindo alguém, a transmissão
+            // fica em destaque e os cards viram uma fileira embaixo.
             function renderVoiceStagePlaceholder() {
                 if (viewingType !== 'voice') return;
                 const connected = myVoiceChannel === viewingChannel;
+                const watchingAny = videoGrid.children.length > 0;
+                const stage = document.getElementById('main-video-wrapper');
+                const strip = document.getElementById('voice-member-strip');
+                stage.style.display = (!connected || connectingMic || watchingAny) ? '' : 'none';
+                strip.classList.toggle('compact', watchingAny);
 
                 if (!connected) {
+                    const inChannel = (window._users || []).filter(u => u.voiceChannel === viewingChannel);
+                    const avatars = inChannel.slice(0, 6).map(u => avatarHtml(u, 'w-8 h-8', false)).join('');
+                    const who = inChannel.length === 0
+                        ? 'Ninguém está na chamada no momento.'
+                        : inChannel.length === 1
+                            ? `${escapeHtml(inChannel[0].name)} está na chamada.`
+                            : `${escapeHtml(inChannel[0].name)} e mais ${inChannel.length - 1} estão na chamada.`;
                     emptyState.innerHTML = `
-                        <div class="voice-cta-icon"><i class="ph-fill ph-phone-incoming"></i></div>
-                        <h2 class="text-xl font-semibold text-zinc-100">Entrar em "${escapeHtml(viewingChannel || '')}"</h2>
-                        <p class="text-sm text-zinc-500 max-w-xs">Conecte seu microfone pra conversar e compartilhar sua tela com quem estiver na sala.</p>
-                        <button type="button" id="btn-join-voice-cta" class="btn-join-call"><i class="ph-fill ph-phone-call"></i> Entrar na chamada</button>
+                        <h2 class="text-2xl font-bold text-zinc-100">${escapeHtml(viewingChannel || '')}</h2>
+                        ${avatars ? `<div class="flex gap-1">${avatars}</div>` : ''}
+                        <p class="text-sm text-zinc-300">${who}</p>
+                        <button type="button" id="btn-join-voice-cta" class="btn-join-call">Entrar na chamada de voz</button>
                     `;
                     document.getElementById('btn-join-voice-cta').addEventListener('click', () => joinVoiceChannel(viewingChannel));
                 } else if (connectingMic) {
-                    // Feedback imediato: a tela já trocou pro canal de voz, mas o
-                    // microfone ainda tá inicializando (na primeira vez, inclui o
-                    // prompt de permissão do Windows). Sem isso, a tela ficava
-                    // parada sem nenhum indicador enquanto isso carregava.
                     emptyState.innerHTML = `
-                        <div class="voice-cta-icon idle"><i class="ph ph-spinner-gap animate-spin"></i></div>
-                        <h2 class="text-xl font-medium text-zinc-200">Conectando microfone...</h2>
-                        <p class="text-sm text-zinc-500 max-w-xs">Só um instante.</p>
+                        <i class="ph ph-spinner-gap animate-spin text-4xl text-zinc-300"></i>
+                        <h2 class="text-base font-medium text-zinc-200">Conectando...</h2>
                     `;
                 } else {
-                    emptyState.innerHTML = `
-                        <div class="voice-cta-icon idle"><i class="ph-fill ph-screencast"></i></div>
-                        <h2 class="text-xl font-medium text-zinc-200">Pronto para compartilhar</h2>
-                        <p class="text-sm text-zinc-500 max-w-xs">Clique em "AO VIVO" ao lado do nome de um participante para assistir a tela dele. Você pode assistir vários ao mesmo tempo, lado a lado.</p>
-                    `;
+                    emptyState.innerHTML = '';
                 }
             }
 
@@ -1866,31 +2022,30 @@
                 const users = (window._users || []).filter(u => u.voiceChannel === myVoiceChannel);
                 users.forEach(u => {
                     const isMe = u.id === socket.id;
-                    const chip = document.createElement('div');
-                    chip.className = 'flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-3 py-1';
+                    const muted = isMe ? isMicMuted : u.muted;
+                    const deafened = isMe ? isMuted : u.deafened;
+                    const tile = document.createElement('div');
+                    tile.className = 'voice-tile';
 
-                    let watchBtn = '';
+                    let watchHtml = '';
                     if (u.isStreaming && !isMe) {
-                        if (selectedStreamers.has(u.id)) {
-                            watchBtn = `<button class="btn-assistindo" onclick="window.toggleWatch('${u.id}')" title="Clique para parar de assistir"><i class="ph-fill ph-eye text-sm"></i> <span class="btn-assistindo-label">ASSISTINDO</span></button>`;
-                        } else {
-                            watchBtn = `<button class="btn-assistir" onclick="window.toggleWatch('${u.id}')" title="Clique para assistir"><i class="ph-fill ph-play-circle text-sm"></i> AO VIVO</button>`;
-                        }
-                    } else if (u.isStreaming && isMe) {
-                        watchBtn = '<span class="text-red-500 text-[10px] font-bold ml-1" style="animation: pulse-ring 1.5s infinite;">SUA TELA</span>';
+                        watchHtml = selectedStreamers.has(u.id)
+                            ? `<div class="tile-watch !bg-transparent !items-end !justify-end p-2"><button class="btn-assistindo" onclick="window.toggleWatch('${u.id}')"><i class="ph-fill ph-eye-slash"></i> Parar de assistir</button></div>`
+                            : `<div class="tile-watch"><button class="btn-assistir" onclick="window.toggleWatch('${u.id}')"><i class="ph-fill ph-monitor-play"></i> Assistir transmissão</button></div>`;
                     }
 
-                    chip.innerHTML = `
-                        ${avatarHtml(u, 'w-6 h-6', isMe)}
-                        <span class="text-xs text-zinc-300 truncate max-w-[100px]">${escapeHtml(u.name)}${isMe ? ' (Você)' : ''}</span>
-                        ${u.isAdmin ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>' : ''}
-                        ${watchBtn}
+                    tile.innerHTML = `
+                        <div class="tile-avatar">${avatarHtml(u, 'w-20 h-20', false)}</div>
+                        ${u.isStreaming ? '<span class="live-badge">Ao vivo</span>' : ''}
+                        ${watchHtml}
+                        <div class="voice-tile-label">
+                            ${muted ? '<i class="ph-fill ph-microphone-slash text-red-400"></i>' : ''}
+                            ${deafened ? '<i class="ph-fill ph-speaker-simple-slash text-red-400"></i>' : ''}
+                            <span class="truncate">${escapeHtml(u.name)}</span>
+                        </div>
                     `;
-                    if (!isMe) {
-                        chip.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                        attachVolumeContextMenu(chip, u.id, u.name, u.isAdmin);
-                    }
-                    strip.appendChild(chip);
+                    if (!isMe) attachVolumeContextMenu(tile, u.id, u.name, u.isAdmin);
+                    strip.appendChild(tile);
                 });
             }
 
@@ -1910,23 +2065,55 @@
                 document.getElementById('image-lightbox-img').src = '';
             });
 
-            function buildMessageEl(msg) {
+            // Mensagens agrupadas igual ao Discord: a primeira de uma sequência da
+            // mesma pessoa (até 7 min) mostra avatar + nome na cor do cargo + data;
+            // as seguintes ficam compactas, com a hora aparecendo só no hover.
+            const GROUP_WINDOW_MS = 7 * 60 * 1000;
+            function formatDiscordTimestamp(ts) {
+                const d = new Date(ts);
+                const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                const today = new Date();
+                const yesterday = new Date();
+                yesterday.setDate(today.getDate() - 1);
+                if (d.toDateString() === today.toDateString()) return `Hoje às ${time}`;
+                if (d.toDateString() === yesterday.toDateString()) return `Ontem às ${time}`;
+                return `${d.toLocaleDateString('pt-BR')} ${time}`;
+            }
+
+            function buildMessageEl(msg, groupStart) {
                 const div = document.createElement('div');
-                div.className = 'chat-message';
-                const initial = (msg.userName || '?').charAt(0).toUpperCase();
                 const time = new Date(msg.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                 // escapeHtml no src é defesa-em-profundidade -- o servidor já valida que
-                // image é um data:image/...;base64,... de verdade (mesma checagem do
-                // avatar), mas não custa nada (mesmo raciocínio de avatarHtml()).
+                // image é um data:image/...;base64,... de verdade (mesma checagem do avatar).
                 const imageHtml = msg.image ? `<img src="${escapeHtml(msg.image)}" class="cm-image" alt="Imagem enviada">` : '';
-                div.innerHTML = `
-                    <div class="cm-avatar ${colorForUser(msg.userId)}">${initial}</div>
-                    <div class="min-w-0">
-                        <div class="cm-header"><span class="cm-name">${escapeHtml(msg.userName)}</span><span class="cm-time">${time}</span></div>
-                        ${msg.text ? '<div class="cm-text"></div>' : ''}
-                        ${imageHtml}
-                    </div>
-                `;
+                if (groupStart) {
+                    // Por id da conexão ou, se a pessoa reconectou (id novo), pelo nome
+                    // -- nomes são únicos no servidor
+                    const author = findUser(msg.userId) || (window._users || []).find(u => u.name === msg.userName) || null;
+                    const color = author ? roleColor(author) : null;
+                    div.className = 'chat-message cm-group-start';
+                    div.innerHTML = `
+                        <div class="cm-gutter cursor-pointer cm-author">${avatarHtml(author || { id: msg.userId, name: msg.userName }, 'w-10 h-10', false)}</div>
+                        <div class="min-w-0">
+                            <div class="cm-header"><span class="cm-name cm-author" style="${color ? `color:${color}` : ''}">${escapeHtml(msg.userName)}</span><span class="cm-time">${formatDiscordTimestamp(msg.ts)}</span></div>
+                            ${msg.text ? '<div class="cm-text"></div>' : ''}
+                            ${imageHtml}
+                        </div>
+                    `;
+                    div.querySelectorAll('.cm-author').forEach(el => el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (author) openProfilePopout(author.id, e.clientX + 8, e.clientY);
+                    }));
+                } else {
+                    div.className = 'chat-message';
+                    div.innerHTML = `
+                        <div class="cm-gutter"><span class="cm-hover-time">${time}</span></div>
+                        <div class="min-w-0">
+                            ${msg.text ? '<div class="cm-text"></div>' : ''}
+                            ${imageHtml}
+                        </div>
+                    `;
+                }
                 if (msg.text) div.querySelector('.cm-text').textContent = msg.text; // textContent evita XSS
                 if (msg.image) div.querySelector('.cm-image').addEventListener('click', () => openImageLightbox(msg.image));
                 return div;
@@ -1936,20 +2123,31 @@
                 const container = document.getElementById('chat-messages');
                 const list = chatHistories[viewingChannel] || [];
                 container.innerHTML = '';
-                if (list.length === 0) {
-                    const empty = document.createElement('div');
-                    empty.className = 'flex-1 flex flex-col items-center justify-center gap-2 text-center';
-                    empty.innerHTML = `
-                        <div class="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 mb-1">
-                            <i class="ph ph-chat-circle-text text-2xl"></i>
-                        </div>
-                        <h3 class="text-base font-semibold text-zinc-200">Bem-vindo a #${escapeHtml(viewingChannel || '')}</h3>
-                        <p class="text-xs text-zinc-500">Esse é o começo desta conversa.</p>
-                    `;
-                    container.appendChild(empty);
-                    return;
-                }
-                list.forEach(msg => container.appendChild(buildMessageEl(msg)));
+
+                // Início do canal, igual ao Discord
+                const welcome = document.createElement('div');
+                welcome.className = 'mt-auto px-4 pb-2';
+                welcome.innerHTML = `
+                    <div class="w-[68px] h-[68px] rounded-full bg-[#41434a] flex items-center justify-center mb-2"><i class="ph ph-hash text-[42px] text-white"></i></div>
+                    <h3 class="text-[32px] leading-10 font-bold text-zinc-100">Boas-vindas a #${escapeHtml(viewingChannel || '')}!</h3>
+                    <p class="text-base text-zinc-400">Este é o começo do canal #${escapeHtml(viewingChannel || '')}.</p>
+                `;
+                container.appendChild(welcome);
+
+                let prev = null;
+                list.forEach(msg => {
+                    const day = new Date(msg.ts).toDateString();
+                    const newDay = !prev || new Date(prev.ts).toDateString() !== day;
+                    if (newDay) {
+                        const divider = document.createElement('div');
+                        divider.className = 'chat-divider';
+                        divider.innerHTML = `<span>${new Date(msg.ts).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>`;
+                        container.appendChild(divider);
+                    }
+                    const groupStart = newDay || prev.userId !== msg.userId || (msg.ts - prev.ts) > GROUP_WINDOW_MS;
+                    container.appendChild(buildMessageEl(msg, groupStart));
+                    prev = msg;
+                });
                 container.scrollTop = container.scrollHeight;
             }
 
@@ -2172,9 +2370,11 @@
                 // Fone no painel do usuário (o "ensurdecer" do Discord) espelha o mesmo estado
                 const btnDeafen = document.getElementById('btn-deafen');
                 if (btnDeafen) {
-                    btnDeafen.classList.toggle('text-red-400', deafened);
-                    btnDeafen.classList.toggle('text-zinc-300', !deafened);
+                    btnDeafen.innerHTML = deafened ? '<i class="ph-fill ph-speaker-simple-slash text-xl"></i>' : '<i class="ph-fill ph-headphones text-xl"></i>';
+                    btnDeafen.classList.toggle('is-off', deafened);
+                    btnDeafen.title = deafened ? 'Ativar áudio' : 'Desativar áudio';
                 }
+                sendVoiceState();
             }
             updateVolumeIcon(); // sincroniza o ícone com o estado inicial (desmutado)
 
@@ -2190,25 +2390,18 @@
                 }
                 updateVolumeIcon();
                 applyAudioToAllTiles();
-                showToast('Áudio', isMuted ? 'Áudio das transmissões silenciado.' : 'Áudio das transmissões ativado.');
+
             });
 
             document.getElementById('btn-deafen').addEventListener('click', () => btnVolume.click());
 
-            // Engrenagem do painel do usuário: menu com nome, microfone e saída de áudio
-            const userSettingsMenu = document.getElementById('user-settings-menu');
-            function setUserSettingsMenuOpen(open) {
-                userSettingsMenu.classList.toggle('hidden', !open);
-                userSettingsMenu.classList.toggle('flex', open);
-            }
-            document.getElementById('btn-user-settings').addEventListener('click', (e) => {
+            // Engrenagem do painel do usuário: abre as configurações (tela cheia)
+            document.getElementById('btn-user-settings').addEventListener('click', () => openUserSettings('account'));
+            // Clicar no próprio nome abre o seu perfil, igual ao Discord
+            document.getElementById('own-user-block').addEventListener('click', (e) => {
                 e.stopPropagation();
-                setUserSettingsMenuOpen(userSettingsMenu.classList.contains('hidden'));
-            });
-            // capture: fecha antes do clique chegar no item (o "Mudar meu nome" para a propagação)
-            userSettingsMenu.addEventListener('click', () => setUserSettingsMenuOpen(false), true);
-            document.addEventListener('click', (e) => {
-                if (!userSettingsMenu.contains(e.target)) setUserSettingsMenuOpen(false);
+                const r = e.currentTarget.getBoundingClientRect();
+                openProfilePopout(socket.id, r.left, r.top - 8, true);
             });
 
             volumeSlider.addEventListener('input', () => {
@@ -2255,106 +2448,110 @@
             function setParticipantsPanelHidden(hidden) {
                 participantsPanelHidden = hidden;
                 participantsPanelEl.style.display = hidden ? 'none' : '';
+                const toggleBtn = document.getElementById('btn-toggle-participants');
+                toggleBtn.classList.toggle('text-zinc-400', hidden);
+                toggleBtn.classList.toggle('text-zinc-100', !hidden);
+                toggleBtn.title = hidden ? 'Mostrar lista de membros' : 'Ocultar lista de membros';
             }
-            document.getElementById('btn-close-participants').addEventListener('click', () => setParticipantsPanelHidden(true));
+
             document.getElementById('btn-toggle-participants').addEventListener('click', () => setParticipantsPanelHidden(!participantsPanelHidden));
 
+            // Lista de membros agrupada por cargo, igual ao Discord: "DONO — 1",
+            // "ADMINISTRADOR — 2", "ONLINE — 3". Nome na cor do cargo e coroa no dono.
             function renderParticipantsPanel() {
                 const users = window._users || [];
-                document.getElementById('participants-count').textContent = users.length;
                 const list = document.getElementById('participants-list');
                 list.innerHTML = '';
-                users.forEach(u => {
-                    const isSelf = u.id === socket.id;
-                    const row = document.createElement('div');
-                    row.className = 'group flex items-center gap-3 px-2 py-1.5 my-px rounded hover:bg-zinc-800 transition-colors';
-                    // Coroa pro dono e escudo pro admin, do lado do nome (como no Discord)
-                    const roleBadge = u.isOwner
-                        ? '<i class="ph-fill ph-crown text-amber-400 text-sm flex-shrink-0" title="Dono da sala"></i>'
-                        : u.isAdmin
-                            ? '<i class="ph-fill ph-shield-star text-blue-400 text-sm flex-shrink-0" title="Administrador"></i>'
-                            : '';
-                    const voiceBadge = u.voiceChannel
-                        ? `<div class="text-xs text-zinc-400 truncate flex items-center gap-1"><i class="ph-fill ph-speaker-high text-emerald-500"></i> ${escapeHtml(u.voiceChannel)}</div>`
-                        : '';
-                    row.innerHTML = `
-                        ${avatarHtml(u, 'w-8 h-8', isSelf)}
-                        <div class="min-w-0 flex-1 leading-tight">
-                            <div class="flex items-center gap-1 min-w-0">
-                                <span class="truncate text-base font-medium text-zinc-400 group-hover:text-zinc-200">${escapeHtml(u.name)}</span>
-                                ${roleBadge}
+                const groups = [
+                    { title: ROLES.owner.name, users: users.filter(u => u.isOwner) },
+                    { title: ROLES.admin.name, users: users.filter(u => !u.isOwner && u.isAdmin) },
+                    { title: 'Online', users: users.filter(u => !u.isOwner && !u.isAdmin) },
+                ];
+                groups.forEach(g => {
+                    if (g.users.length === 0) return;
+                    const header = document.createElement('div');
+                    header.className = 'member-category';
+                    header.textContent = `${g.title} — ${g.users.length}`;
+                    list.appendChild(header);
+                    g.users.forEach(u => {
+                        const row = document.createElement('div');
+                        row.className = 'member-row';
+                        const color = roleColor(u);
+                        const activity = u.isStreaming
+                            ? '<i class="ph-fill ph-screencast text-[#da373c]"></i> Transmitindo'
+                            : u.voiceChannel ? `<i class="ph-fill ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}` : '';
+                        row.innerHTML = `
+                            <span class="status-dot-wrap">${avatarHtml(u, 'w-8 h-8', false)}</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1 min-w-0">
+                                    <span class="mr-name" style="color: ${color || '#949ba4'}">${escapeHtml(u.name)}</span>
+                                    ${u.isOwner ? '<i class="ph-fill ph-crown text-[#f0b232] text-sm flex-shrink-0" title="Dono do servidor"></i>' : ''}
+                                </div>
+                                ${activity ? `<div class="mr-activity flex items-center gap-1">${activity}</div>` : ''}
                             </div>
-                            ${voiceBadge}
-                        </div>
-                    `;
-                    if (!isSelf) {
-                        row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
-                        row.style.cursor = 'context-menu';
-                        attachVolumeContextMenu(row, u.id, u.name, u.isAdmin);
-                    }
-                    list.appendChild(row);
+                        `;
+                        row.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const r = row.getBoundingClientRect();
+                            openProfilePopout(u.id, r.left - 310, r.top);
+                        });
+                        if (u.id !== socket.id) attachVolumeContextMenu(row, u.id, u.name, u.isAdmin);
+                        list.appendChild(row);
+                    });
                 });
             }
 
-            let latestRoomsList = []; // última lista de salas ativas recebida do servidor -- usada pela lista de escolha E pela barra de servidores conhecidos
+            // ==========================================
+            // PERFIL DO MEMBRO (popout ao clicar no nome/avatar, igual ao Discord)
+            // ==========================================
+            const profilePopout = document.getElementById('profile-popout');
+            function openProfilePopout(userId, x, y, fromBottom) {
+                const u = findUser(userId);
+                if (!u) return;
+                const roles = rolesOf(u);
+                const color = roleColor(u) || '#5865f2';
+                const rolesHtml = roles.length
+                    ? roles.map(r => `<span class="inline-flex items-center gap-1 bg-[#2b2d31] rounded px-1.5 py-0.5 text-xs font-medium text-zinc-200"><span class="w-3 h-3 rounded-full" style="background:${r.color}"></span>${r.name}</span>`).join('')
+                    : '<span class="text-xs text-zinc-400">Nenhum cargo</span>';
+                profilePopout.innerHTML = `
+                    <div class="h-[60px]" style="background:${color}"></div>
+                    <div class="px-4 pb-4">
+                        <div class="-mt-10 mb-3 w-fit p-1.5 bg-[#232428] rounded-full status-dot-wrap profile-avatar" style="--status-border:#232428">${avatarHtml(u, 'w-20 h-20', false)}</div>
+                        <div class="bg-zinc-950 rounded-lg p-3 flex flex-col gap-3">
+                            <div>
+                                <div class="text-xl font-semibold text-zinc-100 flex items-center gap-1.5">${escapeHtml(u.name)}${u.isOwner ? '<i class="ph-fill ph-crown text-[#f0b232] text-base" title="Dono do servidor"></i>' : ''}</div>
+                                ${u.id === socket.id ? '<div class="text-sm text-zinc-400">Você</div>' : ''}
+                            </div>
+                            ${u.voiceChannel ? `<div><div class="text-xs font-bold uppercase text-zinc-300 mb-1">No canal de voz</div><div class="text-sm text-zinc-300 flex items-center gap-1"><i class="ph-fill ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}${u.isStreaming ? ' <span class="live-badge ml-1">Ao vivo</span>' : ''}</div></div>` : ''}
+                            <div>
+                                <div class="text-xs font-bold uppercase text-zinc-300 mb-1.5">Cargos</div>
+                                <div class="flex flex-wrap gap-1">${rolesHtml}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                profilePopout.classList.remove('hidden');
+                const w = 300, h = profilePopout.offsetHeight;
+                const left = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+                const top = fromBottom ? Math.max(8, y - h) : Math.max(8, Math.min(y, window.innerHeight - h - 8));
+                profilePopout.style.left = left + 'px';
+                profilePopout.style.top = top + 'px';
+            }
+            function closeProfilePopout() { profilePopout.classList.add('hidden'); }
+            document.addEventListener('click', (e) => {
+                if (!profilePopout.classList.contains('hidden') && !profilePopout.contains(e.target)) closeProfilePopout();
+            });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeProfilePopout(); });
+
+            let latestRoomsList = []; // salas do servidor (só o Quartonha) -- usado pro ícone na barra de servidores
             function renderRoomList(rooms) {
                 latestRoomsList = rooms || [];
-                const container = document.getElementById('rooms-list-container');
-                container.innerHTML = '';
-                if (rooms.length === 0) {
-                    container.innerHTML = '<div class="text-sm text-zinc-500 text-center py-2">Nenhuma sala ativa no momento.</div>';
-                } else {
-                    rooms.forEach(({ name: roomName, hasPassword, icon }) => {
-                        const div = document.createElement('div');
-                        div.className = 'flex items-center gap-2 justify-between p-2 bg-zinc-800/40 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 transition-colors';
-                        const iconHtml = icon
-                            ? `<img src="${icon}" class="w-6 h-6 rounded-md object-cover flex-shrink-0">`
-                            : `<div class="w-6 h-6 rounded-md bg-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-300 flex-shrink-0">${escapeHtml((roomName || '?').charAt(0).toUpperCase())}</div>`;
-                        div.innerHTML = `
-                            <span class="text-sm text-zinc-300 flex items-center gap-2 min-w-0">${iconHtml}<span class="truncate">${escapeHtml(roomName)}</span>${hasPassword ? '<i class="ph ph-lock-simple text-xs text-zinc-500 flex-shrink-0"></i>' : ''}</span>
-                            <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full flex-shrink-0">Entrar</span>
-                        `;
-                        div.addEventListener('click', () => {
-                            inputNewRoom.value = roomName;
-                            if (hasPassword) {
-                                openRoomPasswordPrompt(roomName);
-                            } else {
-                                btnCreateRoom.click();
-                            }
-                        });
-                        container.appendChild(div);
-                    });
-                }
                 renderServerRail();
             }
 
             // ==========================================
-            // BARRA DE SERVIDORES CONHECIDOS (troca rápida entre salas, tipo
-            // Discord) -- lembra localmente quais salas você já entrou. Trocar
-            // sai da sala atual e entra na escolhida, sem fechar o app.
+            // BARRA DE SERVIDORES (só o Quartonha)
             // ==========================================
-            const KNOWN_ROOMS_KEY = 'ssp-known-rooms';
-            const MAX_KNOWN_ROOMS = 8;
-            function getKnownRooms() {
-                try { return JSON.parse(localStorage.getItem(KNOWN_ROOMS_KEY) || '[]'); } catch (e) { return []; }
-            }
-            function addKnownRoom(name) {
-                if (!name) return;
-                // Ordem fixa: se a sala já é conhecida, não mexe na posição dela --
-                // só entra no fim da lista quando é realmente nova. Antes usava
-                // unshift (manda pro topo a cada entrada), o que reordenava a barra
-                // inteira toda vez que você trocava de servidor.
-                let list = getKnownRooms();
-                if (list.includes(name)) return;
-                list.push(name);
-                list = list.slice(-MAX_KNOWN_ROOMS);
-                localStorage.setItem(KNOWN_ROOMS_KEY, JSON.stringify(list));
-            }
-            function removeKnownRoom(name) {
-                const list = getKnownRooms().filter(n => n !== name);
-                localStorage.setItem(KNOWN_ROOMS_KEY, JSON.stringify(list));
-                renderServerRail();
-            }
 
             // Tooltip de hover na barra de servidores -- mostra nome da sala e quem
             // tá online agora, em vez do "title" nativo do navegador (que é feio,
@@ -2392,8 +2589,7 @@
                 if (!railList) return;
                 railList.innerHTML = '';
                 hideServerRailTooltip();
-                const known = getKnownRooms();
-                const names = currentRoom && !known.includes(currentRoom) ? [currentRoom, ...known] : known;
+                const names = currentRoom ? [currentRoom] : [];
                 names.forEach(name => {
                     const meta = latestRoomsList.find(r => r.name === name);
                     const isCurrent = name === currentRoom;
@@ -2407,13 +2603,10 @@
                     btn.innerHTML = meta?.icon
                         ? `<img src="${escapeHtml(meta.icon)}" class="w-full h-full object-cover">`
                         : `<span class="font-bold text-sm">${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`;
-                    btn.addEventListener('click', () => switchToRoom(name));
+
                     btn.addEventListener('mouseenter', () => showServerRailTooltip(btn, name, meta, isOnline, isCurrent));
                     btn.addEventListener('mouseleave', hideServerRailTooltip);
-                    btn.addEventListener('contextmenu', (e) => {
-                        e.preventDefault();
-                        openServerRailContextMenu(name, isCurrent, e.clientX, e.clientY);
-                    });
+
                     wrap.appendChild(btn);
                     // "Pílula" branca na borda esquerda, igual ao Discord: alta na
                     // sala atual, pequena no hover das outras.
@@ -2425,66 +2618,7 @@
                 });
             }
 
-            function switchToRoom(name) {
-                if (!name || name === currentRoom) return;
-                // joinRoom() já cuida de avisar o servidor pra sair da sala atual
-                // antes de entrar na nova (evita ficar "fantasma" nas duas).
-                const meta = latestRoomsList.find(r => r.name === name);
-                const savedPw = localStorage.getItem('ssp-room-password-' + name) || '';
-                if (meta?.hasPassword && !savedPw) {
-                    openRoomPasswordPrompt(name);
-                    return;
-                }
-                joinRoom(name, savedPw);
-            }
 
-            // ==========================================
-            // MENU DE CONTEXTO (BOTÃO DIREITO) NA BARRA DE SERVIDORES
-            // ==========================================
-            // "Apagar sala" só é possível pra sala ATUAL, sendo dono dela -- pra
-            // qualquer outra sala conhecida (offline, ou de outra pessoa) não dá
-            // pra saber se você é dono sem entrar nela primeiro, então a opção nem
-            // aparece.
-            let contextMenuRoomName = null;
-            const serverRailContextMenu = document.getElementById('server-rail-context-menu');
-            function openServerRailContextMenu(name, isCurrent, x, y) {
-                contextMenuRoomName = name;
-                const canDelete = isCurrent && amIOwner;
-                document.getElementById('server-rail-context-delete').classList.toggle('hidden', !canDelete);
-                const menuWidth = 224, menuHeight = canDelete ? 84 : 44;
-                serverRailContextMenu.style.left = Math.min(x, window.innerWidth - menuWidth - 8) + 'px';
-                serverRailContextMenu.style.top = Math.min(y, window.innerHeight - menuHeight - 8) + 'px';
-                serverRailContextMenu.classList.remove('hidden');
-            }
-            function closeServerRailContextMenu() {
-                serverRailContextMenu.classList.add('hidden');
-                contextMenuRoomName = null;
-            }
-            document.getElementById('server-rail-context-remove').addEventListener('click', () => {
-                const name = contextMenuRoomName;
-                closeServerRailContextMenu();
-                if (name) removeKnownRoom(name);
-            });
-            document.getElementById('server-rail-context-delete').addEventListener('click', () => {
-                const name = contextMenuRoomName;
-                closeServerRailContextMenu();
-                if (!name) return;
-                if (!confirm(`Apagar a sala "${name}" pra sempre? Mensagens, canais e configurações somem pra todo mundo. Essa ação não pode ser desfeita.`)) return;
-                socket.emit('delete-room');
-            });
-            document.addEventListener('click', (e) => {
-                if (!serverRailContextMenu.classList.contains('hidden') && !serverRailContextMenu.contains(e.target)) {
-                    closeServerRailContextMenu();
-                }
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') closeServerRailContextMenu();
-            });
-
-            socket.on('room-deleted', () => {
-                removeKnownRoom(currentRoom);
-                returnToLobby('Sala apagada', 'Essa sala foi apagada pelo dono.');
-            });
 
             // ==========================================
             // WEBRTC - CONEXÕES DE ENVIO (SOU O BROADCASTER)
@@ -2592,7 +2726,14 @@
             // ---- Modal e seleção de qualidade ----
             const qualityModal = document.getElementById('quality-modal');
 
+            function updateStreamQualityLabel() {
+                const el = document.getElementById('stream-quality-label');
+                const tier = QUALITY_TIERS.find(t => t.key === selectedQualityMode);
+                el.textContent = 'Qualidade: ' + (tier ? tier.label : 'Automático');
+            }
+
             function selectQualityMode(key) {
+                setTimeout(updateStreamQualityLabel, 0);
                 selectedQualityMode = key;
                 localStorage.setItem('ssp-quality-mode', key);
                 if (key === 'auto') autoTierIndex = AUTO_START_TIER_INDEX;
@@ -2812,13 +2953,15 @@
             // SOCKET EVENTS
             // ==========================================
             socket.on('connect', () => {
-                discoveryStatus.innerHTML = `<i class="ph ph-check-circle"></i> Conectado ao servidor!`;
-                discoveryStatus.className = "text-sm text-green-500 flex items-center gap-2 bg-green-500/10 p-2 rounded border border-green-500/20";
-                inputNewRoom.disabled = false;
-                inputRoomPassword.disabled = false;
-                btnCreateRoom.disabled = false;
-                showToast('Conectado', 'Servidor conectado.');
+                document.getElementById('connection-status').classList.add('hidden');
+                discoveryStatus.textContent = 'Conectado!';
                 socket.emit('get-rooms');
+                // Igual ao Discord: entra direto no servidor. Só na primeira vez
+                // (sem nome salvo) pergunta como a pessoa quer ser chamada.
+                if (!hasEnteredRoom && !currentRoom) {
+                    if (localStorage.getItem('ssp-username')) joinRoom();
+                    else showConnectForm();
+                }
 
                 // Servidor TURN (Metered) -- só busca uma vez por sessão do app (o
                 // 'connect' também dispara de novo em toda reconexão de transporte;
@@ -2855,9 +2998,8 @@
             });
 
             socket.on('connect_error', () => {
-                discoveryStatus.innerHTML = `<i class="ph ph-warning-circle"></i> Servidor offline?`;
-                discoveryStatus.className = "text-sm text-red-500 flex items-center gap-2 bg-red-500/10 p-2 rounded border border-red-500/20";
-                showToast('Erro', 'Não foi possível conectar ao servidor.', 'error');
+                discoveryStatus.textContent = 'O servidor está acordando... isso pode levar até 1 minuto.';
+                if (hasEnteredRoom) document.getElementById('connection-status').classList.remove('hidden');
             });
 
             socket.on('kicked', ({ by }, ack) => {
@@ -2873,7 +3015,9 @@
             // sem nenhum jeito de voltar pro lobby.
             socket.on('disconnect', (reason) => {
                 if (reason === 'io server disconnect' && currentRoom) {
-                    returnToLobby('Desconectado', 'Você foi desconectado da sala pelo servidor.');
+                    returnToLobby('Desconectado', 'Você foi desconectado do servidor.');
+                } else if (hasEnteredRoom) {
+                    document.getElementById('connection-status').classList.remove('hidden');
                 }
             });
 
@@ -2894,21 +3038,8 @@
                 localStorage.setItem('ssp-owner-token-' + roomId, token);
             });
 
-            socket.on('join-error', ({ reason }) => {
-                const attemptedRoom = currentRoom;
-                const msg = reason === 'wrong-password'
-                    ? 'Senha incorreta pra essa sala.'
-                    : reason === 'too-many-attempts'
-                        ? 'Muitas tentativas erradas de senha. Espera 1 minuto e tenta de novo.'
-                        : 'Não foi possível entrar na sala.';
-                returnToLobby(reason === 'wrong-password' ? null : 'Erro', reason === 'wrong-password' ? null : msg);
-                showFullRoomPicker();
-                inputNewRoom.value = attemptedRoom || '';
-                if (reason === 'wrong-password') {
-                    openRoomPasswordPrompt(attemptedRoom, msg);
-                } else if (reason === 'too-many-attempts') {
-                    openRoomPasswordPrompt(attemptedRoom);
-                }
+            socket.on('join-error', () => {
+                returnToLobby('Erro', 'Não foi possível entrar no servidor.');
             });
 
             socket.on('room-joined', ({ roomId }) => {
@@ -2963,7 +3094,10 @@
                 }
 
                 renderChannelSidebar();
-                if (viewingType === 'voice') renderVoiceMemberStrip();
+                if (viewingType === 'voice') {
+                    renderVoiceMemberStrip();
+                    renderVoiceStagePlaceholder();
+                }
             });
 
             // Confirma a entrada de verdade na sala (chega via 'channels-info', que só
@@ -2975,11 +3109,9 @@
                 if (hasEnteredRoom) return;
                 hasEnteredRoom = true;
                 document.getElementById('connection-modal').classList.add('hidden');
-                statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
-                statusText.textContent = currentRoom;
-                showToast('Conectado', `Sala: ${currentRoom}`);
-                addKnownRoom(currentRoom);
+                document.getElementById('connection-status').classList.add('hidden');
                 renderServerRail();
+                sendVoiceState();
             }
 
             socket.on('channels-info', ({ textChannels: tc, voiceChannels: vc }) => {
@@ -3002,13 +3134,7 @@
                 renderMainView();
             });
 
-            socket.on('room-renamed', ({ newName }) => {
-                currentRoom = newName;
-                statusText.textContent = newName;
-                localStorage.setItem('ssp-last-room', newName);
-                showToast('Sala', `Essa sala agora se chama "${newName}".`);
-                renderChannelSidebar();
-            });
+
 
             socket.on('chat-history', (history) => {
                 Object.keys(history).forEach(ch => { chatHistories[ch] = history[ch]; });
@@ -3122,147 +3248,111 @@
                 setControlsEnabled(false);
             }
 
-            function joinRoom(roomName, passwordOverride) {
-                roomName = (roomName || '').trim();
-                const myUsername = inputUsername.value.trim() || 'Participante';
-                if (!roomName) return showToast('Atenção', 'Digite o nome da sala', 'error');
-
-                const password = passwordOverride !== undefined
-                    ? passwordOverride
-                    : (inputRoomPassword.value || '');
-
+            function joinRoom() {
+                const myUsername = (inputUsername.value.trim() || localStorage.getItem('ssp-username') || '').trim();
+                if (!myUsername) return showConnectForm();
                 localStorage.setItem('ssp-username', myUsername);
-                localStorage.setItem('ssp-last-room', roomName);
-                if (password) localStorage.setItem('ssp-room-password-' + roomName, password);
-                else localStorage.removeItem('ssp-room-password-' + roomName);
+                inputUsername.value = myUsername;
 
-                // Trocando de sala sem passar por returnToLobby (ex: clicando na
-                // barra de servidores, ou escolhendo outra sala já dentro do app):
-                // avisa o servidor pra sair da sala anterior antes de entrar na
-                // nova, senão o socket ficava "fantasma" nos dois lugares.
-                if (currentRoom && currentRoom !== roomName) socket.emit('leave-room');
-
-                currentRoom = roomName;
                 teardownRoomState();
-
-                const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
-                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken, userToken: getUserToken() });
-            }
-
-            // Modal dedicado pra pedir senha de sala protegida -- bem mais
-            // visível que só um campo dentro do formulário de criar sala
-            // (era fácil de não perceber que existia).
-            function openRoomPasswordPrompt(roomName, errorMsg) {
-                document.getElementById('room-password-modal-name').textContent = roomName;
-                const input = document.getElementById('room-password-modal-input');
-                input.value = '';
-                const errorEl = document.getElementById('room-password-modal-error');
-                if (errorMsg) {
-                    errorEl.textContent = errorMsg;
-                    errorEl.classList.remove('hidden');
-                } else {
-                    errorEl.classList.add('hidden');
+                // Depois de ser expulso o servidor derruba a conexão -- reconecta e
+                // o 'connect' entra de novo sozinho (o nome já está salvo).
+                if (!socket.connected) {
+                    socket.connect();
+                    return;
                 }
-                document.getElementById('room-password-modal').classList.remove('hidden');
-                document.getElementById('room-password-modal').classList.add('flex');
-                setTimeout(() => input.focus(), 0);
+                const ownerToken = localStorage.getItem('ssp-owner-token-Quartonha') || null;
+                socket.emit('join-room', { username: myUsername, avatar: myAvatar, ownerToken, userToken: getUserToken() });
             }
-            function closeRoomPasswordPrompt() {
-                document.getElementById('room-password-modal').classList.add('hidden');
-                document.getElementById('room-password-modal').classList.remove('flex');
-            }
-            document.getElementById('btn-room-password-cancel').addEventListener('click', closeRoomPasswordPrompt);
-            document.getElementById('room-password-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                const pw = document.getElementById('room-password-modal-input').value;
-                const roomName = document.getElementById('room-password-modal-name').textContent;
-                closeRoomPasswordPrompt();
-                joinRoom(roomName, pw);
-            });
 
-            // Volta pra tela de login (usado quando o servidor manda 'kicked')
+            function showConnectForm() {
+                document.getElementById('connection-modal').classList.remove('hidden');
+                document.getElementById('connect-loading').classList.add('hidden');
+                document.getElementById('connect-form').classList.remove('hidden');
+                setTimeout(() => inputUsername.focus(), 0);
+            }
+
+            // Volta pra tela de entrada (usado quando o servidor manda 'kicked')
             function returnToLobby(toastTitle, toastMsg) {
                 teardownRoomState();
                 currentRoom = null;
-                statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
-                statusText.textContent = '';
-                document.getElementById('connection-modal').classList.remove('hidden');
-                document.getElementById('btn-close-connection-modal').classList.add('hidden');
+                showConnectForm();
                 if (toastTitle) showToast(toastTitle, toastMsg, 'error');
             }
 
-            btnCreateRoom.addEventListener('click', () => joinRoom(inputNewRoom.value));
-
-            // ==========================================
-            // ESCOLHA DE SALA: sempre passa pela lista de salas ativas (não pula
-            // direto pra última sala) -- pra sempre dar pra escolher outro
-            // servidor, em vez de só ter como "trocar" clicando num link discreto.
-            // ==========================================
-            // Mantida por compatibilidade com quem já chama isso (returnToLobby,
-            // join-error) -- a seção agora fica sempre visível, então isso hoje só
-            // garante o foco fica no campo certo.
-            function showFullRoomPicker() {
-                document.getElementById('input-new-room').focus();
-            }
+            btnCreateRoom.addEventListener('click', () => {
+                if (!inputUsername.value.trim()) return inputUsername.focus();
+                document.getElementById('connect-form').classList.add('hidden');
+                document.getElementById('connect-loading').classList.remove('hidden');
+                joinRoom();
+            });
+            inputUsername.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnCreateRoom.click(); });
             updateOwnUserBlock();
             updateMicIcon();
 
-            // "+" na barra de servidores: abre o mesmo seletor de salas, mas por
-            // cima do app já conectado (pra entrar em outra sem perder o que já
-            // tava fazendo). O X só aparece nesse caso -- não faz sentido "fechar"
-            // a tela de login antes de escolher uma sala pela primeira vez.
-            document.getElementById('btn-server-rail-add').addEventListener('click', () => {
-                document.getElementById('connection-modal').classList.remove('hidden');
-                document.getElementById('btn-close-connection-modal').classList.remove('hidden');
-                document.getElementById('input-new-room').focus();
-            });
-            document.getElementById('btn-close-connection-modal').addEventListener('click', () => {
-                document.getElementById('connection-modal').classList.add('hidden');
+            // ==========================================
+            // COMPARTILHAR TELA (janela "Compartilhar tela", igual ao Discord):
+            // abas Aplicativos / Telas inteiras, escolhe a fonte, liga ou não o
+            // áudio e clica em Transmitir.
+            // ==========================================
+            const shareAudioToggle = document.getElementById('share-audio-toggle');
+            const btnGoLive = document.getElementById('btn-go-live');
+            let shareSources = [];
+            let shareTab = 'window';
+            let selectedSourceId = null;
+
+            shareAudioToggle.addEventListener('change', () => {
+                selectedAudioMode = shareAudioToggle.checked ? 'system' : 'none';
+                document.getElementById('system-audio-warning').classList.toggle('hidden', !shareAudioToggle.checked);
             });
 
-            // ==========================================
-            // SELEÇÃO DO MODO DE ÁUDIO (EVITA CAPTURAR O DISCORD)
-            // ==========================================
-            document.querySelectorAll('.audio-mode-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    selectedAudioMode = btn.dataset.mode;
-                    document.querySelectorAll('.audio-mode-btn').forEach(b => b.classList.remove('active-mode'));
-                    btn.classList.add('active-mode');
-                    document.getElementById('system-audio-warning').classList.toggle('hidden', selectedAudioMode !== 'system');
+            function renderShareSources() {
+                document.querySelectorAll('.screen-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === shareTab));
+                sourcesList.innerHTML = '';
+                shareSources.filter(s => s.id.startsWith(shareTab + ':')).forEach(s => {
+                    const div = document.createElement('div');
+                    div.className = 'screen-option flex flex-col gap-2' + (s.id === selectedSourceId ? ' selected' : '');
+                    // Título de janela vem de fora (ex: título de uma aba do navegador) -- escapa
+                    div.innerHTML = `<img src="${escapeHtml(s.thumbnail)}" class="rounded w-full h-24 object-cover bg-black"><span class="text-sm truncate text-zinc-200 font-medium">${escapeHtml(s.name)}</span>`;
+                    div.onclick = () => { selectedSourceId = s.id; btnGoLive.disabled = false; renderShareSources(); };
+                    div.ondblclick = () => { selectedSourceId = s.id; btnGoLive.click(); };
+                    sourcesList.appendChild(div);
                 });
-            });
+            }
+            document.querySelectorAll('.screen-tab').forEach(t => t.addEventListener('click', () => { shareTab = t.dataset.tab; renderShareSources(); }));
 
-            // ==========================================
-            // COMPARTILHAMENTO DE TELA (RESOLUÇÃO MÁXIMA)
-            // ==========================================
+            function closeScreenModal() {
+                screenModal.classList.add('hidden');
+                screenModal.classList.remove('flex');
+            }
+
             btnShare.addEventListener('click', async () => {
                 if (!myVoiceChannel) {
-                    showToast('Atenção', 'Entre em uma sala de voz antes de compartilhar sua tela.', 'error');
+                    showToast('Atenção', 'Entre em um canal de voz antes de compartilhar sua tela.', 'error');
                     return;
                 }
                 if (isSharing) return stopScreenShare();
-                if (window.electronAPI && window.electronAPI.getSources) {
-                    const sources = await window.electronAPI.getSources();
-                    sourcesList.innerHTML = '';
-                    sources.forEach(s => {
-                        const div = document.createElement('div');
-                        div.className = 'screen-option bg-zinc-950 border border-zinc-700 rounded-lg p-2 cursor-pointer transition-all flex flex-col gap-2';
-                        // Título de janela vem de fora (ex: título de uma aba do navegador) -- escapa
-                        div.innerHTML = `<img src="${escapeHtml(s.thumbnail)}" class="rounded w-full h-24 object-cover border border-zinc-800"><span class="text-xs text-center truncate text-zinc-300 font-medium">${escapeHtml(s.name)}</span>`;
-                        div.onclick = () => startScreenShare(s.id, selectedAudioMode);
-                        sourcesList.appendChild(div);
-                    });
-                    screenModal.classList.remove('hidden');
-                    screenModal.classList.add('flex');
-                } else {
+                if (!window.electronAPI || !window.electronAPI.getSources) {
                     showToast('Erro', 'API Electron não disponível.', 'error');
+                    return;
                 }
+                shareSources = await window.electronAPI.getSources();
+                selectedSourceId = null;
+                btnGoLive.disabled = true;
+                updateStreamQualityLabel();
+                renderShareSources();
+                screenModal.classList.remove('hidden');
+                screenModal.classList.add('flex');
             });
-
-            document.getElementById('btn-close-screen-modal').addEventListener('click', () => {
-                screenModal.classList.add('hidden');
-                screenModal.classList.remove('flex');
+            document.getElementById('btn-panel-share').addEventListener('click', () => btnShare.click());
+            btnGoLive.addEventListener('click', () => {
+                if (!selectedSourceId) return;
+                closeScreenModal();
+                startScreenShare(selectedSourceId, selectedAudioMode);
             });
+            document.getElementById('btn-close-screen-modal').addEventListener('click', closeScreenModal);
+            document.getElementById('btn-cancel-share').addEventListener('click', closeScreenModal);
+            document.getElementById('btn-stream-quality').addEventListener('click', () => document.getElementById('btn-quality').click());
 
             function onShareStarted(settingsLabel, audioMode) {
                 isSharing = true;

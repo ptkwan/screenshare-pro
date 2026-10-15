@@ -8,6 +8,27 @@ sessão.
 
 ## 2026-10-15
 
+### Falha ao ler o Redis apagava os dados do servidor
+- **Causa**: se `loadRoomsFromRedis` falhasse (Upstash fora do ar, timeout),
+  o servidor seguia só com a memória vazia -- e a primeira gravação
+  (`flushDirtyRooms`) sobrescrevia a sala salva com uma vazia: mensagens,
+  canais, ícone e dono perdidos.
+- **Correção**: tenta carregar 5 vezes (3s entre elas); se não conseguir,
+  desliga a gravação no Redis nessa execução em vez de sobrescrever.
+- **Validado** com um Upstash falso: com falha, nenhum `set`/`del` chega no
+  banco; funcionando, apaga só as salas antigas e mantém o Quartonha (dono,
+  mensagens antigas e novas).
+
+### Supressão de ruído (RNNoise) falhava às vezes ao entrar na chamada
+- **Causa**: entrar no canal e conectar com quem já estava nele chamavam
+  `ensureDenoisedMicStream()` ao mesmo tempo; cada chamada criava o seu
+  AudioContext e a segunda sobrescrevia o `denoiseCtx` da primeira no meio
+  do caminho ("node name ... is not defined"), caindo pro microfone cru.
+- **Correção**: as chamadas simultâneas esperam a mesma montagem (promise
+  compartilhada).
+- **Como foi encontrado**: erro no console de uma das instâncias no teste
+  automatizado com duas instâncias do app.
+
 ### Ícone da sala permitia rodar JavaScript no app de todo mundo (XSS)
 - **Causa**: `update-room-icon` só checava o tamanho, e o cliente montava
   `<img src="${meta.icon}">` sem escape. Como `rooms-update` é `io.emit`
