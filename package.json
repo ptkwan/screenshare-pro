@@ -11,6 +11,7 @@
     "prestart": "npm run build:css",
     "prebuild": "npm run build:css",
     "build": "electron-builder",
+    "prerelease": "npm run build:css",
     "release": "electron-builder --publish always"
   },
   "build": {

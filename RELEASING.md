@@ -16,17 +16,27 @@ Repositório de releases: https://github.com/ptkwan/screenshare-pro
    > que a que eles têm instalada. Esquecer de subir o número = ninguém recebe
    > a atualização.
 
-2. Commite e envie pra `main`, crie a tag da versão e rode o release:
+2. Commite e envie pra `main`, crie a tag **e a release** da versão, e só
+   então rode o release:
 
    ```bash
-   git tag v$(node -p "require('./package.json').version") && git push origin main --tags
+   V=$(node -p "require('./package.json').version")
+   git tag v$V && git push origin main --tags
+   gh release create v$V --repo ptkwan/screenshare-pro --title $V --notes ""
    export GH_TOKEN=$(gh auth token)
    npm run release
    ```
 
-   > A tag precisa existir ANTES do `npm run release`: o electron-builder 26
-   > não cria mais a tag sozinho, e o GitHub recusa a release ("Published
-   > releases must have a valid tag") -- ela fica pela metade, sem o `.exe`.
+   > Por que criar a release antes: o electron-builder 26 tenta criar a
+   > release duas vezes ao mesmo tempo e acaba gerando **duas releases** com
+   > a mesma tag -- uma completa e outra só com o `.blockmap`, que confunde o
+   > atualizador. Com a release já criada, ele só sobe os arquivos nela.
+   > Confira depois em https://github.com/ptkwan/screenshare-pro/releases que
+   > só existe UMA release da versão, com `.exe`, `latest.yml` e `.blockmap`.
+   >
+   > O `npm run release` recompila o `styles.css` sozinho (`prerelease`). Antes
+   > ele não recompilava, e a 1.22.0 saiu com o CSS antigo (cores marrons,
+   > peças sobrepostas).
 
    Isso builda o instalador (`.exe`) e publica a release no GitHub já como
    publicada (`releaseType: release` no `package.json`) -- os amigos passam a
@@ -50,7 +60,9 @@ Repositório de releases: https://github.com/ptkwan/screenshare-pro
 ```bash
 cd client
 # 1. edite "version" em package.json e commite antes de rodar isso
-git tag v$(node -p "require('./package.json').version") && git push origin main --tags
+V=$(node -p "require('./package.json').version")
+git tag v$V && git push origin main --tags
+gh release create v$V --repo ptkwan/screenshare-pro --title $V --notes ""
 export GH_TOKEN=$(gh auth token)
 npm run release
 ```
