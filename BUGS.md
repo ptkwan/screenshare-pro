@@ -8,6 +8,18 @@ sessão.
 
 ## 2026-10-15
 
+### "Compartilhar tela" só mostrava tela inteira (aplicativos não apareciam)
+- **Sintoma**: na aba "Aplicativos" faltavam os programas abertos (Chrome,
+  Discord, jogos...).
+- **Causa**: o Chromium (`desktopCapturer`) não lista janelas
+  **minimizadas** -- o Windows não deixa capturar janela minimizada. Jogo em
+  tela cheia minimiza no Alt+Tab, então sumia da lista.
+- **Correção**: `native/minimized-windows.ps1` lista as minimizadas; elas
+  aparecem no fim da aba "Aplicativos" marcadas "Minimizada" e, ao clicar, o
+  app restaura a janela e já começa a transmitir.
+- **Validado** com teste automatizado: janela minimizada aparece, é restaurada
+  ao clicar e quem assiste recebe a imagem dela.
+
 ### Layout sobrepondo em janelas pequenas e sobrando espaço nas grandes
 - **Sintoma**: "muita sobreposição, mal otimizado". Em janelas estreitas as
   duas barras laterais espremiam o meio (abaixo de ~900px os botões da

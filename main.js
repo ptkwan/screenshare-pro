@@ -346,6 +346,57 @@ function resolvePidFromHwnd(hwnd) {
     });
 }
 
+// ==========================================
+// JANELAS MINIMIZADAS NA LISTA DE "COMPARTILHAR TELA"
+// O Chromium não lista janela minimizada (o Windows não deixa capturar), e
+// pra quem usa parecia que o app "não reconhecia" os programas -- jogo em
+// tela cheia minimiza no Alt+Tab. Listamos elas à parte; escolher uma
+// restaura a janela e aí ela vira uma fonte normal.
+// ==========================================
+function runMinimizedWindowsScript(args) {
+    return new Promise((resolve) => {
+        const scriptPath = app.isPackaged
+            ? path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'minimized-windows.ps1')
+            : path.join(__dirname, 'native', 'minimized-windows.ps1');
+        execFile(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...args],
+            { timeout: 8000, encoding: 'utf8' },
+            (err, stdout) => resolve(err ? null : stdout)
+        );
+    });
+}
+
+function ownWindowHandle() {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const buf = mainWindow.getNativeWindowHandle();
+    return buf.length >= 8 ? Number(buf.readBigUInt64LE(0)) : buf.readUInt32LE(0);
+}
+
+ipcMain.handle('get-minimized-windows', async () => {
+    if (process.platform !== 'win32') return [];
+    const out = await runMinimizedWindowsScript([]);
+    if (!out) return [];
+    const own = ownWindowHandle();
+    return out.split(/\r?\n/)
+        .map(line => line.split('\t'))
+        .filter(([hwnd, name]) => /^\d+$/.test(hwnd || '') && name && Number(hwnd) !== own)
+        .map(([hwnd, name]) => ({ hwnd: Number(hwnd), name: name.trim() }));
+});
+
+ipcMain.handle('restore-minimized-window', async (event, hwnd) => {
+    if (process.platform !== 'win32' || !Number.isSafeInteger(hwnd) || hwnd <= 0) return null;
+    await runMinimizedWindowsScript(['-Restore', String(hwnd)]);
+    // A janela leva um instante pra voltar e aparecer pro Chromium
+    for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 250));
+        const sources = await desktopCapturer.getSources({ types: ['window'] });
+        const source = sources.find(s => extractHwndFromSourceId(s.id) === hwnd);
+        if (source) return { id: source.id, name: source.name, thumbnail: source.thumbnail.toDataURL() };
+    }
+    return null;
+});
+
 ipcMain.handle('resolve-window-pid', async (event, sourceId) => {
     if (process.platform !== 'win32') return null;
     const hwnd = extractHwndFromSourceId(sourceId);

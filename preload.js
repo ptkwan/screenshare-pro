@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeApp: () => ipcRenderer.send('close-app'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     getSources: () => ipcRenderer.invoke('GET_SOURCES'),
+    // Janelas minimizadas (o Chromium não lista) e restaurar uma pra compartilhar
+    getMinimizedWindows: () => ipcRenderer.invoke('get-minimized-windows'),
+    restoreMinimizedWindow: (hwnd) => ipcRenderer.invoke('restore-minimized-window', hwnd),
 
     // Configurações do app (aceleração de hardware / método de captura) e
     // diagnóstico pra tela preta

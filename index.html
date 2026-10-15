@@ -3413,6 +3413,7 @@
             const shareAudioToggle = document.getElementById('share-audio-toggle');
             const btnGoLive = document.getElementById('btn-go-live');
             let shareSources = [];
+            let minimizedSources = []; // { hwnd, name } -- o Chromium não lista janela minimizada
             let shareTab = 'window';
             let selectedSourceId = null;
 
@@ -3433,6 +3434,36 @@
                     div.ondblclick = () => { selectedSourceId = s.id; btnGoLive.click(); };
                     sourcesList.appendChild(div);
                 });
+                if (shareTab === 'window') {
+                    minimizedSources.forEach(m => {
+                        const div = document.createElement('div');
+                        div.className = 'screen-option flex flex-col gap-2';
+                        div.title = 'Janela minimizada: clique pra restaurar e transmitir';
+                        div.innerHTML = `
+                            <div class="rounded w-full h-24 bg-black flex flex-col items-center justify-center gap-1 text-zinc-400 minimized-thumb">
+                                <i class="ph ph-arrow-square-up-right text-2xl"></i><span class="text-xs">Minimizada</span>
+                            </div>
+                            <span class="text-sm truncate text-zinc-200 font-medium">${escapeHtml(m.name)}</span>`;
+                        div.onclick = () => shareMinimizedWindow(m, div);
+                        sourcesList.appendChild(div);
+                    });
+                }
+            }
+
+            // Janela minimizada: restaura e já começa a transmitir (a pessoa vai
+            // estar vendo o próprio jogo/programa voltar, igual ao Discord)
+            async function shareMinimizedWindow(m, tileEl) {
+                const thumb = tileEl.querySelector('.minimized-thumb');
+                thumb.innerHTML = '<i class="ph ph-spinner-gap animate-spin text-2xl"></i><span class="text-xs">Restaurando...</span>';
+                const source = await window.electronAPI.restoreMinimizedWindow(m.hwnd);
+                if (!source) {
+                    showToast('Compartilhar tela', 'Não deu pra restaurar essa janela. Abra ela e tente de novo.', 'error');
+                    minimizedSources = await window.electronAPI.getMinimizedWindows().catch(() => []);
+                    renderShareSources();
+                    return;
+                }
+                closeScreenModal();
+                startScreenShare(source.id, selectedAudioMode);
             }
             document.querySelectorAll('.screen-tab').forEach(t => t.addEventListener('click', () => { shareTab = t.dataset.tab; renderShareSources(); }));
 
@@ -3452,6 +3483,13 @@
                     return;
                 }
                 shareSources = await window.electronAPI.getSources();
+                // As minimizadas chegam um pouco depois (consulta mais lenta) -- a
+                // janela já abre com o resto e elas aparecem no fim da lista.
+                minimizedSources = [];
+                window.electronAPI.getMinimizedWindows?.().then(list => {
+                    minimizedSources = list || [];
+                    if (!screenModal.classList.contains('hidden')) renderShareSources();
+                }).catch(() => {});
                 selectedSourceId = null;
                 btnGoLive.disabled = true;
                 updateStreamQualityLabel();
