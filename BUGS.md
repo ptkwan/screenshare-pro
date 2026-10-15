@@ -6,6 +6,46 @@ sessão.
 
 ---
 
+## 2026-10-15
+
+### Ícone da sala permitia rodar JavaScript no app de todo mundo (XSS)
+- **Causa**: `update-room-icon` só checava o tamanho, e o cliente montava
+  `<img src="${meta.icon}">` sem escape. Como `rooms-update` é `io.emit`
+  global, um ícone tipo `x" onerror="..."` rodava em todos os clientes
+  conectados, inclusive com acesso ao `electronAPI`.
+- **Correção**: o servidor valida o ícone com o mesmo regex do avatar
+  (`sanitizeAvatar`), e o cliente passa `escapeHtml()` no `src`.
+
+### Qualquer um virava dono da sala quando o dono estava offline
+- **Causa**: `finishJoin` dava a posse pra quem entrasse sempre que nenhum
+  dono estivesse conectado, e com isso dava pra apagar a sala, trocar ícone e
+  promover admins.
+- **Correção**: só sala que nunca teve token de dono é reivindicada.
+  Trade-off: dono que perder o token não recupera a posse sozinho.
+
+### Admin preso ao nome / dava pra se passar por outra pessoa
+- **Causa**: admin era lembrado pelo nome, e nomes não eram únicos. Bastava
+  entrar com o nome de um admin pra virar admin (e se passar por ele no chat).
+- **Correção**: cada cliente gera um token pessoal (`ssp-user-token`) que vai
+  no `join-room`. Admin agora fica preso a esse token (`adminTokens` no
+  Redis; o `adminNames` antigo é ignorado, então o dono precisa promover de
+  novo). Nomes repetidos na mesma sala ganham sufixo ("Bia (2)"), exceto se
+  for a mesma pessoa (mesmo token) numa sessão antiga ainda não derrubada.
+
+### Outros
+- Senha de sala: SHA-256 sem salt → scrypt com salt. Hash antigo continua
+  aceito e é trocado pelo novo no primeiro acerto.
+- `client-log` limitado a 30 mensagens/minuto por socket.
+- Electron 24 → 44.5.1 e electron-builder 24 → 26.16.1 (Chromium de 2023,
+  com falhas conhecidas). `loopback-capture` usa N-API, então não precisa de
+  rebuild por versão, mas **falta testar o app empacotado**.
+- **Validado** com teste automatizado (vários clientes socket.io contra o
+  servidor local): ícone malicioso rejeitado, dono offline não perde a sala,
+  impostor com mesmo nome não herda admin, admin sobrevive a reconexão,
+  senha legada e nova conferem.
+
+---
+
 ## 2026-09-02
 
 ### Tela de conexão travava o pedido de lista de salas (referência a botão removido)

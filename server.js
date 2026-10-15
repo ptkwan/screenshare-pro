@@ -58,6 +58,8 @@ const DEFAULT_TEXT_CHANNELS = ['geral', 'off-topic'];
 const DEFAULT_VOICE_CHANNELS = ['Sala 1', 'Sala 2', 'Sala 3'];
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_NAME_LENGTH = 40;
+const CLIENT_LOG_MAX_PER_WINDOW = 30;
+const CLIENT_LOG_WINDOW_MS = 60_000;
 
 const rooms = new Map(); // roomId -> Set de socket ids (todo mundo no servidor/sala)
 const roomChannels = new Map(); // roomId -> { text: string[], voice: string[] }
@@ -68,11 +70,12 @@ const roomPasswords = new Map(); // roomId -> hash da senha (só existe se a sal
 const roomOwnerTokens = new Map(); // roomId -> token secreto (só quem criou a sala recebe)
 const roomIcons = new Map(); // roomId -> ícone da sala (data URL base64, opcional)
 const MAX_ICON_LENGTH = 300_000; // ~200KB de imagem em base64 -- gera muito pouco tráfego pra broadcast
-// roomId -> Set<username> promovido a administrador pelo dono. Preso ao NOME
-// (não a um token) de propósito -- sem sistema de conta/login, é o único jeito
-// simples de "lembrar" quem é admin entre reconexões: continua admin enquanto
-// reconectar com esse mesmo nome na mesma sala.
-const roomAdminNames = new Map();
+// roomId -> Set<userToken> promovido a administrador pelo dono. Antes era
+// preso ao NOME, mas nome não é único nem secreto: qualquer um que entrasse
+// com o mesmo nome de um admin virava admin. Agora fica preso ao token
+// pessoal (gerado e guardado só no cliente de cada pessoa, nunca enviado pra
+// mais ninguém) -- continua admin entre reconexões, sem dar pra se passar.
+const roomAdminTokens = new Map();
 
 // ==========================================
 // PERSISTÊNCIA (Upstash Redis, opcional) -- sem UPSTASH_REDIS_REST_URL e
@@ -103,7 +106,7 @@ function roomSnapshot(roomId) {
     passwordHash: roomPasswords.get(roomId) || null,
     ownerToken: roomOwnerTokens.get(roomId) || null,
     icon: roomIcons.get(roomId) || null,
-    adminNames: Array.from(roomAdminNames.get(roomId) || []),
+    adminTokens: Array.from(roomAdminTokens.get(roomId) || []),
   };
 }
 
@@ -145,7 +148,9 @@ async function loadRoomsFromRedis() {
       if (snap.passwordHash) roomPasswords.set(roomId, snap.passwordHash);
       if (snap.ownerToken) roomOwnerTokens.set(roomId, snap.ownerToken);
       if (snap.icon) roomIcons.set(roomId, snap.icon);
-      if (snap.adminNames?.length) roomAdminNames.set(roomId, new Set(snap.adminNames));
+      // `adminNames` (formato antigo, preso ao nome) é ignorado de propósito --
+      // era justamente a brecha; o dono precisa promover de novo.
+      if (snap.adminTokens?.length) roomAdminTokens.set(roomId, new Set(snap.adminTokens));
       roomVoiceMembers.set(roomId, new Map());
       roomBroadcasters.set(roomId, new Map());
     }
@@ -213,16 +218,66 @@ function sanitizeChatImage(raw) {
   return AVATAR_DATA_URL_RE.test(raw) ? raw : null;
 }
 
+// Token pessoal de cada pessoa (gerado no cliente, guardado no localStorage)
+// -- identifica "quem é quem" entre reconexões sem conta/login. Só aceita o
+// formato exato que o cliente gera (32 hex), qualquer outra coisa vira null.
+const USER_TOKEN_RE = /^[0-9a-f]{32}$/;
+function sanitizeUserToken(raw) {
+  return typeof raw === 'string' && USER_TOKEN_RE.test(raw) ? raw : null;
+}
+
+// Nome único dentro da sala -- sem isso, dava pra entrar com o mesmo nome de
+// outra pessoa e se passar por ela no chat. Sockets com o MESMO token pessoal
+// são a mesma pessoa (ex: sessão antiga ainda não derrubada depois de uma
+// reconexão), então não contam como conflito.
+function uniqueNameInRoom(roomId, name, socket) {
+  const taken = new Set();
+  (rooms.get(roomId) || new Set()).forEach(id => {
+    if (id === socket.id) return;
+    const s = io.sockets.sockets.get(id);
+    if (!s) return;
+    if (socket.data.userToken && s.data.userToken === socket.data.userToken) return;
+    taken.add((s.data.username || '').toLowerCase());
+  });
+  if (!taken.has(name.toLowerCase())) return name;
+  for (let n = 2; ; n++) {
+    const suffix = ` (${n})`;
+    const candidate = name.slice(0, MAX_NAME_LENGTH - suffix.length) + suffix;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+// scrypt com salt aleatório -- SHA-256 puro (formato antigo) é rápido demais
+// pra senha: com o hash vazado (ex: Redis), dava pra testar bilhões de
+// tentativas por segundo, e senhas iguais geravam hashes iguais.
+// Formato: "scrypt$<salt hex>$<hash hex>". Hash antigo (64 hex, SHA-256) ainda
+// é aceito e é trocado pelo novo formato no primeiro acerto.
+const SCRYPT_KEYLEN = 32;
+
 function hashPassword(pw) {
-  return crypto.createHash('sha256').update((pw || '').toString()).digest('hex');
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync((pw || '').toString(), salt, SCRYPT_KEYLEN);
+  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+function isLegacyPasswordHash(storedHash) {
+  return !storedHash.startsWith('scrypt$');
 }
 
 // Compara hashes em tempo constante -- comparar string com "!==" direto
 // vazaria informação por quanto tempo a comparação leva (timing attack),
 // dando pra descobrir a senha certa byte a byte medindo a resposta.
 function passwordMatches(candidate, storedHash) {
-  const candidateHash = Buffer.from(hashPassword(candidate), 'hex');
-  const stored = Buffer.from(storedHash, 'hex');
+  const pw = (candidate || '').toString();
+  let candidateHash, stored;
+  if (isLegacyPasswordHash(storedHash)) {
+    candidateHash = crypto.createHash('sha256').update(pw).digest();
+    stored = Buffer.from(storedHash, 'hex');
+  } else {
+    const [, saltHex, hashHex] = storedHash.split('$');
+    stored = Buffer.from(hashHex || '', 'hex');
+    candidateHash = crypto.scryptSync(pw, Buffer.from(saltHex || '', 'hex'), SCRYPT_KEYLEN);
+  }
   return candidateHash.length === stored.length && crypto.timingSafeEqual(candidateHash, stored);
 }
 
@@ -384,21 +439,23 @@ function removeFromRoom(socket, room) {
 // completeJoin(). Usado tanto pelo join normal (por nome) quanto pelo join
 // por código de sala oculta -- depois que cada um já decidiu QUAL sala é
 // essa e QUE é permitido tentar entrar nela, o resto é idêntico.
-function finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom }) {
+function finishJoin(socket, roomId, { username, avatar, ownerToken, userToken, isNewRoom }) {
   ensureRoomStructures(roomId);
 
-  socket.data.username = cleanName(username, MAX_NAME_LENGTH) || 'Anônimo';
+  socket.data.userToken = sanitizeUserToken(userToken);
+  socket.data.username = uniqueNameInRoom(roomId, cleanName(username, MAX_NAME_LENGTH) || 'Anônimo', socket);
   socket.data.avatar = sanitizeAvatar(avatar);
 
   // Dono da sala: quem cria recebe um token secreto (guardado só no cliente
   // dele) que prova a autoria em futuras reconexões — sem isso, qualquer um
   // que entrasse na sala poderia expulsar/renomear/trocar ícone à vontade.
-  // Sala sem ninguém conectado agora com esse privilégio (dono nunca
-  // existiu, ou perdeu o token trocando de navegador/PC) reivindica o
-  // mesmo jeito, com um token novo -- o antigo, perdido, deixa de valer.
+  // Só sala que NUNCA teve dono (ex: salva antes do sistema de dono existir)
+  // é reivindicada por quem entrar. Antes bastava o dono estar offline pra
+  // qualquer um que entrasse virar dono (e poder apagar a sala, trocar o
+  // ícone, promover admins...). Trade-off: dono que perder o token (trocou de
+  // PC/limpou dados) não recupera a posse sozinho.
   const isOwnerByToken = !isNewRoom && !!ownerToken && roomOwnerTokens.get(roomId) === ownerToken;
-  const ownerCurrentlyConnected = Array.from(rooms.get(roomId) || []).some(id => io.sockets.sockets.get(id)?.data.isOwner);
-  if (isNewRoom || !ownerCurrentlyConnected) {
+  if (isNewRoom || !roomOwnerTokens.has(roomId)) {
     const token = crypto.randomBytes(16).toString('hex');
     roomOwnerTokens.set(roomId, token);
     socket.data.isOwner = true;
@@ -408,9 +465,9 @@ function finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom })
     socket.data.isOwner = isOwnerByToken;
   }
 
-  // Admin "gruda" no nome dentro dessa sala -- reconectar (ou reentrar) com o
-  // mesmo nome continua admin, sem precisar o dono promover de novo.
-  socket.data.isAdmin = !isNewRoom && !!roomAdminNames.get(roomId)?.has(socket.data.username);
+  // Admin "gruda" no token pessoal dentro dessa sala -- reconectar (ou
+  // reentrar) continua admin, sem precisar o dono promover de novo.
+  socket.data.isAdmin = !isNewRoom && !!socket.data.userToken && !!roomAdminTokens.get(roomId)?.has(socket.data.userToken);
 
   completeJoin(socket, roomId);
 }
@@ -439,7 +496,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', (payload) => {
-    const { username, avatar, password, ownerToken } = payload || {};
+    const { username, avatar, password, ownerToken, userToken } = payload || {};
     // roomId nunca era validado/limpo aqui -- qualquer string (incluindo lixo
     // tipo "[object Object]" vindo de um bug em outro lugar) virava o nome
     // literal e permanente da sala, sem chance de correção.
@@ -465,6 +522,10 @@ io.on('connection', (socket) => {
         return;
       }
       clearAttempts(attemptKey);
+      if (isLegacyPasswordHash(roomPasswords.get(roomId))) {
+        roomPasswords.set(roomId, hashPassword(password));
+        markRoomDirty(roomId);
+      }
     }
 
     if (isNewRoom) {
@@ -473,7 +534,7 @@ io.on('connection', (socket) => {
       markRoomDirty(roomId);
     }
 
-    finishJoin(socket, roomId, { username, avatar, ownerToken, isNewRoom });
+    finishJoin(socket, roomId, { username, avatar, ownerToken, userToken, isNewRoom });
   });
 
   // Sai da sala atual sem fechar a conexão -- pra trocar de servidor sem
@@ -494,7 +555,7 @@ io.on('connection', (socket) => {
     const room = socket.data.room;
     const trimmed = cleanName(newName, MAX_NAME_LENGTH);
     if (!trimmed) return;
-    socket.data.username = trimmed;
+    socket.data.username = room ? uniqueNameInRoom(room, trimmed, socket) : trimmed;
     if (room) broadcastUserList(room);
   });
 
@@ -532,7 +593,7 @@ io.on('connection', (socket) => {
     renameMapKey(roomPasswords, oldRoom, trimmed);
     renameMapKey(roomOwnerTokens, oldRoom, trimmed);
     renameMapKey(roomIcons, oldRoom, trimmed);
-    renameMapKey(roomAdminNames, oldRoom, trimmed);
+    renameMapKey(roomAdminTokens, oldRoom, trimmed);
     deleteRoomFromRedis(oldRoom); // a sala "velha" não existe mais sob esse nome
     markRoomDirty(trimmed);
 
@@ -550,7 +611,10 @@ io.on('connection', (socket) => {
     }
     const room = socket.data.room;
     if (!room) return;
-    const clean = typeof icon === 'string' && icon && icon.length <= MAX_ICON_LENGTH ? icon : null;
+    // Mesma validação do avatar -- antes só checava o tamanho, e o ícone vai
+    // pra dentro de src="..." no cliente de TODO mundo conectado (rooms-update
+    // é io.emit global): algo tipo `x" onerror="..."` rodava JS em todos.
+    const clean = typeof icon === 'string' && icon.length <= MAX_ICON_LENGTH ? sanitizeAvatar(icon) : null;
     if (clean) roomIcons.set(room, clean); else roomIcons.delete(room);
     markRoomDirty(room);
     io.emit('rooms-update', getRoomList());
@@ -728,9 +792,9 @@ io.on('connection', (socket) => {
   });
 
   // Promover/remover administrador -- só o dono decide (um admin não pode
-  // promover outro admin nem a si mesmo). Fica preso ao NOME dentro da sala
-  // (ver comentário de roomAdminNames): reconectar com o mesmo nome continua
-  // admin, mas outro nome (ou trocar de sala) não carrega o cargo junto.
+  // promover outro admin nem a si mesmo). Fica preso ao token pessoal dentro
+  // da sala (ver comentário de roomAdminTokens). Cliente antigo, sem token,
+  // vira admin só nessa sessão (não tem como lembrar dele depois).
   socket.on('promote-admin', ({ userId }) => {
     if (!socket.data.isOwner) {
       console.log(`[permissao-negada] ${socket.id} (${socket.data.username}) tentou promover admin sem ser dono`);
@@ -741,8 +805,10 @@ io.on('connection', (socket) => {
     const targetSocket = io.sockets.sockets.get(userId);
     if (!targetSocket || targetSocket.data.room !== room) return;
 
-    if (!roomAdminNames.has(room)) roomAdminNames.set(room, new Set());
-    roomAdminNames.get(room).add(targetSocket.data.username);
+    if (targetSocket.data.userToken) {
+      if (!roomAdminTokens.has(room)) roomAdminTokens.set(room, new Set());
+      roomAdminTokens.get(room).add(targetSocket.data.userToken);
+    }
     targetSocket.data.isAdmin = true;
     markRoomDirty(room);
     broadcastUserList(room);
@@ -759,7 +825,7 @@ io.on('connection', (socket) => {
     const targetSocket = io.sockets.sockets.get(userId);
     if (!targetSocket || targetSocket.data.room !== room) return;
 
-    roomAdminNames.get(room)?.delete(targetSocket.data.username);
+    if (targetSocket.data.userToken) roomAdminTokens.get(room)?.delete(targetSocket.data.userToken);
     targetSocket.data.isAdmin = false;
     markRoomDirty(room);
     broadcastUserList(room);
@@ -801,7 +867,7 @@ io.on('connection', (socket) => {
     roomPasswords.delete(room);
     roomOwnerTokens.delete(room);
     roomIcons.delete(room);
-    roomAdminNames.delete(room);
+    roomAdminTokens.delete(room);
     dirtyRooms.delete(room);
     deleteRoomFromRedis(room);
 
@@ -838,7 +904,17 @@ io.on('connection', (socket) => {
     io.to(target).emit('ice-candidate', { sender: socket.id, candidate });
   });
 
-  socket.on('client-log', ({ level, message }) => {
+  // Limite por socket -- sem isso, qualquer um conseguia inundar o log do
+  // servidor (e esconder o que importa no painel do Render).
+  let clientLogWindowStart = 0;
+  let clientLogCount = 0;
+  socket.on('client-log', ({ level, message } = {}) => {
+    const now = Date.now();
+    if (now - clientLogWindowStart > CLIENT_LOG_WINDOW_MS) {
+      clientLogWindowStart = now;
+      clientLogCount = 0;
+    }
+    if (++clientLogCount > CLIENT_LOG_MAX_PER_WINDOW) return;
     console.log(`[client-log:${level || 'info'}] ${socket.data.username || socket.id}: ${String(message).slice(0, 500)}`);
   });
 

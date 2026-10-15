@@ -2398,7 +2398,7 @@
                         (isCurrent ? 'rounded-2xl bg-blue-600 text-white' : 'rounded-3xl bg-zinc-800 text-zinc-300 hover:rounded-2xl hover:bg-zinc-700');
                     btn.style.opacity = isOnline || isCurrent ? '1' : '0.5';
                     btn.innerHTML = meta?.icon
-                        ? `<img src="${meta.icon}" class="w-full h-full object-cover">`
+                        ? `<img src="${escapeHtml(meta.icon)}" class="w-full h-full object-cover">`
                         : `<span class="font-bold text-sm">${escapeHtml((name || '?').charAt(0).toUpperCase())}</span>`;
                     btn.addEventListener('click', () => switchToRoom(name));
                     btn.addEventListener('mouseenter', () => showServerRailTooltip(btn, name, meta, isOnline, isCurrent));
@@ -2869,6 +2869,19 @@
                 }
             });
 
+            // Token pessoal (identifica essa instalação entre reconexões, pro
+            // servidor lembrar quem é admin sem depender do nome). Gerado uma
+            // vez e nunca enviado pra ninguém além do servidor.
+            function getUserToken() {
+                let token = localStorage.getItem('ssp-user-token');
+                if (!/^[0-9a-f]{32}$/.test(token || '')) {
+                    const bytes = crypto.getRandomValues(new Uint8Array(16));
+                    token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                    localStorage.setItem('ssp-user-token', token);
+                }
+                return token;
+            }
+
             socket.on('owner-token', ({ roomId, token }) => {
                 localStorage.setItem('ssp-owner-token-' + roomId, token);
             });
@@ -3125,7 +3138,7 @@
                 teardownRoomState();
 
                 const ownerToken = localStorage.getItem('ssp-owner-token-' + roomName) || null;
-                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken });
+                socket.emit('join-room', { roomId: currentRoom, username: myUsername, avatar: myAvatar, password, ownerToken, userToken: getUserToken() });
             }
 
             // Modal dedicado pra pedir senha de sala protegida -- bem mais
