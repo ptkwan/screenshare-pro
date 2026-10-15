@@ -386,14 +386,17 @@ const MUSIC_BOT_NAME = 'DJ Quartonha';
 const MUSIC_COMMANDS = new Set([
   'play', 'p', 'tocar', 'skip', 's', 'pular', 'stop', 'parar', 'pause', 'pausar',
   'resume', 'continuar', 'queue', 'q', 'fila', 'volume', 'vol', 'np', 'tocando',
-  'help', 'ajuda',
+  'help', 'ajuda', 'back', 'voltar', 'anterior',
 ]);
+// Botões do painel da fila (qualquer um da sala) -> repassados pro DJ
+const MUSIC_CONTROLS = new Set(['skip', 'back', 'pause', 'resume', 'stop', 'jump', 'remove']);
 const MUSIC_HELP = [
   '🎵 Comandos do DJ (digite em qualquer canal de texto):',
   '!play <nome ou link do YouTube> -- toca ou põe na fila (precisa estar numa chamada)',
-  '!skip -- pula a música | !pause / !resume -- pausa / continua',
+  '!skip -- pula a música | !voltar -- volta pra anterior | !pause / !resume -- pausa / continua',
   '!fila -- mostra a fila | !tocando -- o que está tocando',
   '!volume <0-100> -- volume da música | !stop -- para tudo e limpa a fila',
+  'Clique no DJ Quartonha no canal de voz pra ver a fila (pular, voltar, tirar música); clique direito pra volume só seu ou desconectar.',
 ].join('\n');
 const roomMusicHosts = new Map(); // roomId -> { socketId, textChannel }
 
@@ -459,7 +462,7 @@ function musicBotState(room) {
   const host = roomMusicHosts.get(room);
   const s = host ? io.sockets.sockets.get(host.socketId) : null;
   if (!s || !s.data.voiceChannel) return null;
-  return { id: MUSIC_BOT_ID, name: MUSIC_BOT_NAME, voiceChannel: s.data.voiceChannel, hostId: s.id, title: host.title || null };
+  return { id: MUSIC_BOT_ID, name: MUSIC_BOT_NAME, voiceChannel: s.data.voiceChannel, hostId: s.id, title: host.title || null, queue: host.queue || null };
 }
 function broadcastMusicBot(room) {
   io.to(room).emit('music-bot-state', musicBotState(room));
@@ -676,6 +679,42 @@ io.on('connection', (socket) => {
     if (!host || host.socketId !== socket.id) return;
     host.title = typeof title === 'string' ? title.slice(0, 200) : null;
     broadcastMusicBot(room);
+  });
+
+  // Fila completa mandada pelo DJ (painel da fila de todo mundo)
+  socket.on('music-queue-state', (state) => {
+    const room = socket.data.room;
+    const host = room ? roomMusicHosts.get(room) : null;
+    if (!host || host.socketId !== socket.id || !state || typeof state !== 'object') return;
+    const item = (m) => (m && typeof m === 'object' ? {
+      id: Number(m.id) || 0,
+      title: String(m.title || '').slice(0, 200),
+      duration: Number(m.duration) || 0,
+      by: String(m.by || '').slice(0, MAX_NAME_LENGTH),
+    } : null);
+    const list = (a) => (Array.isArray(a) ? a.slice(0, 30).map(item).filter(Boolean) : []);
+    const cur = item(state.current);
+    if (cur) {
+      cur.position = Number(state.current.position) || 0;
+      cur.paused = state.current.paused === true;
+    }
+    host.queue = {
+      current: cur,
+      queue: list(state.queue),
+      history: list(state.history),
+      resolving: Math.max(0, Math.min(30, Number(state.resolving) || 0)),
+      volume: Math.max(0, Math.min(100, Number(state.volume) || 0)),
+    };
+    if (cur) host.title = cur.title;
+    broadcastMusicBot(room);
+  });
+
+  // Botões do painel da fila: qualquer um da sala, repassado pro DJ
+  socket.on('music-control', ({ cmd, id } = {}) => {
+    const room = socket.data.room;
+    const host = room ? roomMusicHosts.get(room) : null;
+    if (!host || !MUSIC_CONTROLS.has(cmd)) return;
+    io.to(host.socketId).emit('music-command', { cmd, args: Number.isSafeInteger(id) ? String(id) : '', by: socket.data.username });
   });
 
   // "Desconectar" o bot (clique direito nele no canal de voz), igual ao Discord

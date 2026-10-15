@@ -138,6 +138,30 @@
         .chat-message .cm-time { font-size: 12px; color: #949ba4; }
         .chat-message .cm-text { font-size: 16px; line-height: 1.375; color: #dbdee1; white-space: pre-wrap; word-break: break-word; }
         .cm-bot-avatar { width: 40px; height: 40px; border-radius: 9999px; background: #5865f2; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .menu-item.hidden { display: none; }
+        #music-panel { width: 360px; max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: #111214; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.5); overflow: hidden; }
+        #music-panel.hidden { display: none; }
+        .music-panel-header { display: flex; align-items: center; gap: 10px; padding: 12px; background: #1e1f22; }
+        .music-now { padding: 12px; border-bottom: 1px solid #2b2d31; }
+        .music-now-title { font-weight: 600; color: #f2f3f5; line-height: 1.3; }
+        .music-now-meta { font-size: 12px; color: #949ba4; margin: 2px 0 8px; min-height: 16px; }
+        .music-progress { height: 4px; border-radius: 2px; background: #3f4147; overflow: hidden; margin-bottom: 6px; }
+        .music-progress > div { height: 100%; width: 0; background: #5865f2; transition: width .5s linear; }
+        .music-ctrl-btn { width: 34px; height: 34px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #dbdee1; font-size: 18px; }
+        .music-ctrl-btn:hover:not(:disabled) { background: #2b2d31; color: #fff; }
+        .music-ctrl-btn:disabled { opacity: .35; cursor: default; }
+        .music-ctrl-main { background: #f2f3f5; color: #111214; }
+        .music-ctrl-main:hover:not(:disabled) { background: #fff; color: #111214; }
+        .music-lists { overflow-y: auto; padding: 4px 6px 8px; }
+        .music-section { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: #949ba4; padding: 10px 6px 4px; }
+        .music-item { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 4px; }
+        .music-item:hover { background: #2b2d31; }
+        .music-item-index { width: 16px; text-align: right; font-size: 12px; color: #949ba4; flex-shrink: 0; }
+        .music-item-title { font-size: 14px; color: #dbdee1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .music-item-meta { font-size: 12px; color: #949ba4; }
+        .music-icon-btn { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #b5bac1; flex-shrink: 0; }
+        .music-icon-btn:hover { background: #3f4147; color: #fff; }
+        .music-empty { font-size: 13px; color: #949ba4; padding: 6px; display: flex; align-items: center; gap: 6px; }
         .music-bot-avatar { border-radius: 9999px; background: #5865f2; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .vm-bot-title { display: block; font-size: 11px; color: #949ba4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cm-bot-tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; line-height: 15px; padding: 0 4px; border-radius: 3px; margin: 0 6px 0 4px; align-self: center; }
@@ -628,6 +652,9 @@
         </div>
     </div>
 
+    <!-- FILA DE MÚSICAS DO DJ QUARTONHA (clique no bot no canal de voz) -->
+    <div id="music-panel" class="hidden fixed z-50"></div>
+
     <!-- PERFIL DO MEMBRO (clique no nome/avatar, igual ao Discord) -->
     <div id="profile-popout" class="hidden fixed z-50 w-[300px] bg-[#232428] rounded-lg shadow-2xl overflow-hidden"></div>
 
@@ -981,7 +1008,7 @@
             const MUSIC_BOT_ID = 'music-bot';
             const music = {
                 ctx: null, out: null, sendGain: null, localGain: null, // AudioContext da música, saída pra chamada, saída pros fones
-                audioEl: null, elSource: null, current: null, queue: [],
+                audioEl: null, elSource: null, current: null, queue: [], history: [],
                 volume: 50, resolving: 0, gen: 0, preparingAnnounced: false,
             };
             let musicBotState = null; // { voiceChannel, hostId, title } -- onde o bot está agora (vem do servidor)
@@ -2032,13 +2059,13 @@
                     if (musicBotState && musicBotState.voiceChannel === ch) {
                         const row = document.createElement('div');
                         row.className = 'voice-member-row';
-                        row.title = 'Clique direito: volume do bot / desconectar';
+                        row.title = 'Clique: fila de músicas · Clique direito: volume do bot / desconectar';
                         row.innerHTML = `
                             ${MUSIC_BOT_AVATAR_HTML('w-6 h-6 text-sm')}
                             <span class="vm-name">DJ Quartonha<span class="vm-bot-title">${escapeHtml(musicBotState.title || 'preparando...')}</span></span>
                             <span class="vm-icons"><span class="cm-bot-tag">BOT</span></span>
                         `;
-                        row.addEventListener('click', (e) => { e.stopPropagation(); openMusicBotMenu(e.clientX + 8, e.clientY); });
+                        row.addEventListener('click', (e) => { e.stopPropagation(); openMusicPanel(e.clientX + 8, e.clientY - 40); });
                         attachMusicBotMenu(row);
                         voiceList.appendChild(row);
                     }
@@ -2167,7 +2194,9 @@
                 if (musicBotState && musicBotState.voiceChannel === myVoiceChannel) {
                     const tile = document.createElement('div');
                     tile.className = 'voice-tile';
-                    tile.title = 'Clique direito: volume do bot / desconectar';
+                    tile.title = 'Clique: fila de músicas · Clique direito: volume do bot / desconectar';
+                    tile.style.cursor = 'pointer';
+                    tile.addEventListener('click', (e) => { e.stopPropagation(); openMusicPanel(e.clientX, e.clientY); });
                     tile.innerHTML = `
                         <div class="tile-avatar">${MUSIC_BOT_AVATAR_HTML('w-20 h-20 text-4xl')}</div>
                         <div class="voice-tile-label"><span class="truncate">🎵 ${escapeHtml(musicBotState.title || 'DJ Quartonha')}</span></div>
@@ -3976,6 +4005,12 @@
                 return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
             }
 
+            // Cada música: { id, title, duration, by, blob } -- o Blob fica guardado
+            // (as últimas MUSIC_HISTORY_MAX tocadas também) pra voltar/tocar de novo
+            // na hora, sem baixar outra vez.
+            const MUSIC_HISTORY_MAX = 10;
+            let musicNextId = 1;
+
             function musicStopCurrent() {
                 const el = music.audioEl;
                 music.audioEl = null;
@@ -3991,6 +4026,7 @@
             function musicStopAll() {
                 music.gen++;
                 music.queue = [];
+                music.history = [];
                 musicStopCurrent();
             }
             // Para tudo e avisa o servidor que não sou mais o DJ
@@ -3999,40 +4035,105 @@
                 if (socket.connected) socket.emit('music-release');
             }
 
-            async function musicPlayNext() {
+            // Manda pro servidor a fila inteira (vira o painel da fila de todo mundo)
+            function publishMusicQueue() {
+                if (!socket.connected) return;
+                const brief = m => ({ id: m.id, title: m.title, duration: m.duration, by: m.by });
+                const el = music.audioEl;
+                socket.emit('music-queue-state', {
+                    current: music.current ? { ...brief(music.current), position: el ? el.currentTime : 0, paused: el ? el.paused : false } : null,
+                    queue: music.queue.map(brief),
+                    history: music.history.slice().reverse().map(brief),
+                    resolving: music.resolving,
+                    volume: music.volume,
+                });
+            }
+
+            // Música atual vai pro histórico (as mais antigas saem de vez)
+            function musicArchiveCurrent() {
+                const cur = music.current;
                 musicStopCurrent();
+                if (!cur) return;
+                music.history.push(cur);
+                if (music.history.length > MUSIC_HISTORY_MAX) music.history.shift();
+            }
+
+            async function musicStartItem(item) {
+                const ctx = ensureMusicCtx();
+                if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+                const el = new Audio();
+                el.src = URL.createObjectURL(item.blob);
+                music.elSource = ctx.createMediaElementSource(el);
+                music.elSource.connect(music.sendGain);
+                music.elSource.connect(music.localGain);
+                music.audioEl = el;
+                music.current = item;
+                el.onended = () => { if (music.audioEl === el) musicPlayNext(); };
+                el.onerror = () => {
+                    if (music.audioEl !== el) return;
+                    reportLog('warn', `[musica] erro ao tocar "${item.title}": ${el.error?.code}`);
+                    musicSay(`⚠️ Não consegui tocar "${item.title}", pulando.`);
+                    musicStopCurrent(); // não vai pro histórico
+                    musicPlayNext();
+                };
+                try {
+                    await el.play();
+                    musicSay(`▶️ Tocando agora: ${item.title} [${formatDuration(item.duration)}] -- pedido por ${item.by}`);
+                    socket.emit('music-now-playing', { title: item.title });
+                    publishMusicQueue();
+                } catch (e) {
+                    if (music.audioEl === el) el.onerror();
+                }
+            }
+
+            function musicPlayNext() {
+                musicArchiveCurrent();
                 const next = music.queue.shift();
                 if (!next) {
+                    publishMusicQueue();
                     // Ainda tem música sendo baixada: ela começa sozinha quando chegar
                     if (music.resolving > 0) return;
                     musicSay('📭 A fila acabou.');
                     musicRelease();
                     return;
                 }
-                const ctx = ensureMusicCtx();
-                if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
-                const el = new Audio();
-                el.src = URL.createObjectURL(new Blob([next.data], { type: next.mime }));
-                next.data = null; // o Blob já guarda os bytes
-                music.elSource = ctx.createMediaElementSource(el);
-                music.elSource.connect(music.sendGain);
-                music.elSource.connect(music.localGain);
-                music.audioEl = el;
-                music.current = next;
-                el.onended = () => { if (music.audioEl === el) musicPlayNext(); };
-                el.onerror = () => {
-                    if (music.audioEl !== el) return;
-                    reportLog('warn', `[musica] erro ao tocar "${next.title}": ${el.error?.code}`);
-                    musicSay(`⚠️ Não consegui tocar "${next.title}", pulando.`);
-                    musicPlayNext();
-                };
-                try {
-                    await el.play();
-                    musicSay(`▶️ Tocando agora: ${next.title} [${formatDuration(next.duration)}] -- pedido por ${next.by}`);
-                    socket.emit('music-now-playing', { title: next.title });
-                } catch (e) {
-                    if (music.audioEl === el) el.onerror();
+                return musicStartItem(next);
+            }
+
+            // Volta pra música anterior; a atual vira a próxima da fila
+            function musicPlayPrevious(by) {
+                const prev = music.history.pop();
+                if (!prev) return musicSay('Não tem música anterior.');
+                if (music.current) {
+                    const cur = music.current;
+                    musicStopCurrent();
+                    music.queue.unshift(cur);
                 }
+                musicSay(`⏮️ ${by} voltou pra "${prev.title}".`);
+                return musicStartItem(prev);
+            }
+
+            // Toca agora uma música da fila (ou do histórico, de novo)
+            function musicJumpTo(id, by) {
+                let idx = music.queue.findIndex(m => m.id === id);
+                let item = null;
+                if (idx >= 0) item = music.queue.splice(idx, 1)[0];
+                else {
+                    idx = music.history.findIndex(m => m.id === id);
+                    if (idx >= 0) item = music.history.splice(idx, 1)[0];
+                }
+                if (!item) return publishMusicQueue();
+                musicSay(`⏭️ ${by} pôs "${item.title}" pra tocar agora.`);
+                musicArchiveCurrent();
+                return musicStartItem(item);
+            }
+
+            function musicRemove(id, by) {
+                const idx = music.queue.findIndex(m => m.id === id);
+                if (idx < 0) return publishMusicQueue();
+                const [item] = music.queue.splice(idx, 1);
+                musicSay(`🗑️ ${by} tirou "${item.title}" da fila.`);
+                publishMusicQueue();
             }
 
             const MUSIC_ERRORS = {
@@ -4050,6 +4151,7 @@
                 if (music.queue.length + music.resolving >= MUSIC_MAX_QUEUE) return musicSay(`A fila está cheia (${MUSIC_MAX_QUEUE} músicas).`);
                 const gen = music.gen;
                 music.resolving++;
+                publishMusicQueue();
                 let result;
                 try {
                     if (await window.electronAPI.musicIsReady()) musicSay(`🔎 Procurando "${query}"...`);
@@ -4068,16 +4170,25 @@
                     reportLog('warn', `[musica] falha ao buscar "${query}": ${result.reason} ${result.detail || ''}`);
                     musicSay(`❌ "${query}": ${MUSIC_ERRORS[result.reason] || MUSIC_ERRORS.failed}.`);
                     if (!music.current && !music.queue.length && !music.resolving) musicRelease();
+                    else publishMusicQueue();
                     return;
                 }
-                const item = { title: result.title, duration: result.duration, data: result.data, mime: result.mime, by };
+                const item = {
+                    id: musicNextId++, title: result.title, duration: result.duration, by,
+                    blob: new Blob([result.data], { type: result.mime }),
+                };
                 music.queue.push(item);
                 if (!music.current) musicPlayNext();
-                else musicSay(`➕ Na fila (#${music.queue.length}): ${item.title} [${formatDuration(item.duration)}] -- pedido por ${by}`);
+                else {
+                    musicSay(`➕ Na fila (#${music.queue.length}): ${item.title} [${formatDuration(item.duration)}] -- pedido por ${by}`);
+                    publishMusicQueue();
+                }
             }
 
             socket.on('music-bot-state', (state) => {
                 musicBotState = state;
+                musicStateReceivedAt = Date.now();
+                renderMusicPanel();
                 renderChannelSidebar();
                 if (viewingType === 'voice') renderVoiceMemberStrip();
             });
@@ -4112,16 +4223,23 @@
                         if (!music.current) return musicSay('Não tem nada tocando agora.');
                         musicSay(`⏭️ ${by} pulou "${music.current.title}".`);
                         return musicPlayNext();
+                    case 'back': case 'voltar': case 'anterior':
+                        return musicPlayPrevious(by);
+                    case 'jump': // painel da fila: ▶ numa música da fila / ↺ numa já tocada
+                        return musicJumpTo(Number(args), by);
+                    case 'remove': // painel da fila: ✕
+                        return musicRemove(Number(args), by);
                     case 'stop': case 'parar':
                         musicSay(`⏹️ ${by} parou a música e limpou a fila.`);
                         return musicRelease();
                     case 'pause': case 'pausar':
                         if (!el || el.paused) return musicSay('Não tem nada tocando agora.');
                         el.pause();
+                        publishMusicQueue();
                         return musicSay(`⏸️ Pausado por ${by}. Use !resume pra continuar.`);
                     case 'resume': case 'continuar':
                         if (!el || !el.paused) return musicSay('Não tem nada pausado.');
-                        el.play().catch(() => {});
+                        el.play().then(publishMusicQueue).catch(() => {});
                         return musicSay(`▶️ Continuando: ${music.current.title}`);
                     case 'np': case 'tocando':
                         if (!music.current) return musicSay('Não tem nada tocando agora.');
@@ -4133,6 +4251,7 @@
                         music.queue.slice(0, 10).forEach((m, i) => lines.push(`${i + 1}. ${m.title} [${formatDuration(m.duration)}] -- ${m.by}`));
                         if (music.queue.length > 10) lines.push(`... e mais ${music.queue.length - 10}`);
                         if (music.resolving) lines.push(`(+${music.resolving} sendo baixada${music.resolving > 1 ? 's' : ''})`);
+                        lines.push('(clique no DJ Quartonha no canal de voz pra ver e mexer na fila)');
                         return musicSay(lines.join('\n'));
                     }
                     case 'volume': case 'vol': {
@@ -4140,10 +4259,120 @@
                         if (!Number.isFinite(v) || v < 0 || v > 100) return musicSay(`🔊 Volume: ${music.volume}. Use !volume <0-100>.`);
                         music.volume = v;
                         applyMusicVolume();
+                        publishMusicQueue();
                         return musicSay(`🔊 Volume da música: ${v} (por ${by})`);
                     }
                 }
             });
+
+            // ==========================================
+            // PAINEL DA FILA (clique no DJ Quartonha) -- igual pra todo mundo
+            // ==========================================
+            // Mostra o que está tocando (com progresso), as próximas e as que já
+            // tocaram; os botões mandam 'music-control' pro servidor, que repassa
+            // pro DJ. A fila em si vem do DJ via servidor (musicBotState.queue).
+            const musicPanel = document.getElementById('music-panel');
+            let musicStateReceivedAt = 0;
+            let musicPanelTimer = null;
+
+            function musicControl(cmd, id) {
+                socket.emit('music-control', { cmd, id });
+            }
+            function musicCurrentPosition() {
+                const cur = musicBotState?.queue?.current;
+                if (!cur) return 0;
+                const elapsed = cur.paused ? 0 : (Date.now() - musicStateReceivedAt) / 1000;
+                return Math.min(cur.duration || Infinity, (cur.position || 0) + elapsed);
+            }
+            function updateMusicPanelProgress() {
+                const cur = musicBotState?.queue?.current;
+                const bar = document.getElementById('music-panel-progress');
+                const time = document.getElementById('music-panel-time');
+                if (!cur || !bar || !time) return;
+                const pos = musicCurrentPosition();
+                bar.style.width = cur.duration ? `${Math.min(100, (pos / cur.duration) * 100)}%` : '0%';
+                time.textContent = `${formatDuration(pos)} / ${formatDuration(cur.duration)}`;
+            }
+
+            function renderMusicPanel() {
+                if (musicPanel.classList.contains('hidden')) return;
+                if (!musicBotState) return closeMusicPanel();
+                const q = musicBotState.queue || {};
+                const cur = q.current;
+                const itemHtml = (m, i, actions) => `
+                    <div class="music-item">
+                        <span class="music-item-index">${i}</span>
+                        <div class="min-w-0 flex-1">
+                            <div class="music-item-title">${escapeHtml(m.title)}</div>
+                            <div class="music-item-meta">${formatDuration(m.duration)} · ${escapeHtml(m.by || '')}</div>
+                        </div>
+                        ${actions}
+                    </div>`;
+                const upcoming = (q.queue || []).map((m, i) => itemHtml(m, i + 1, `
+                    <button class="music-icon-btn" data-cmd="jump" data-id="${m.id}" title="Tocar agora"><i class="ph-fill ph-play"></i></button>
+                    <button class="music-icon-btn" data-cmd="remove" data-id="${m.id}" title="Tirar da fila"><i class="ph ph-x"></i></button>`)).join('');
+                const played = (q.history || []).map((m, i) => itemHtml(m, '', `
+                    <button class="music-icon-btn" data-cmd="jump" data-id="${m.id}" title="Tocar de novo"><i class="ph ph-arrow-counter-clockwise"></i></button>`)).join('');
+                const resolving = q.resolving ? `<div class="music-empty"><i class="ph ph-spinner-gap animate-spin"></i> Baixando ${q.resolving} música${q.resolving > 1 ? 's' : ''}...</div>` : '';
+
+                musicPanel.innerHTML = `
+                    <div class="music-panel-header">
+                        <div class="music-bot-avatar w-10 h-10 text-xl"><i class="ph-fill ph-music-notes"></i></div>
+                        <div class="min-w-0 flex-1">
+                            <div class="font-semibold text-zinc-100">DJ Quartonha <span class="cm-bot-tag">BOT</span></div>
+                            <div class="text-xs text-zinc-400 truncate">em ${escapeHtml(musicBotState.voiceChannel)} · volume ${q.volume ?? 50}</div>
+                        </div>
+                        <button class="music-icon-btn" id="music-panel-close" title="Fechar"><i class="ph ph-x"></i></button>
+                    </div>
+                    <div class="music-now">
+                        <div class="music-now-title">${cur ? escapeHtml(cur.title) : (q.resolving ? 'Baixando...' : 'Nada tocando')}</div>
+                        <div class="music-now-meta">${cur ? `pedido por ${escapeHtml(cur.by || '')}${cur.paused ? ' · pausado' : ''}` : ''}</div>
+                        <div class="music-progress"><div id="music-panel-progress"></div></div>
+                        <div class="flex items-center justify-between">
+                            <span id="music-panel-time" class="text-xs text-zinc-400"></span>
+                            <div class="flex items-center gap-1">
+                                <button class="music-ctrl-btn" data-cmd="back" title="Voltar pra anterior" ${(q.history || []).length ? '' : 'disabled'}><i class="ph-fill ph-skip-back"></i></button>
+                                <button class="music-ctrl-btn music-ctrl-main" data-cmd="${cur?.paused ? 'resume' : 'pause'}" title="${cur?.paused ? 'Continuar' : 'Pausar'}" ${cur ? '' : 'disabled'}><i class="ph-fill ${cur?.paused ? 'ph-play' : 'ph-pause'}"></i></button>
+                                <button class="music-ctrl-btn" data-cmd="skip" title="Pular" ${cur ? '' : 'disabled'}><i class="ph-fill ph-skip-forward"></i></button>
+                                <button class="music-ctrl-btn" data-cmd="stop" title="Parar e limpar a fila"><i class="ph-fill ph-stop"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="music-lists">
+                        <div class="music-section">Próximas — ${(q.queue || []).length}</div>
+                        ${upcoming || (resolving ? '' : '<div class="music-empty">Fila vazia. Use !play no chat pra adicionar.</div>')}
+                        ${resolving}
+                        ${played ? `<div class="music-section">Tocadas</div>${played}` : ''}
+                    </div>
+                `;
+                document.getElementById('music-panel-close').addEventListener('click', closeMusicPanel);
+                musicPanel.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (b.dataset.cmd === 'stop' && !confirm('Parar a música e limpar a fila?')) return;
+                    musicControl(b.dataset.cmd, b.dataset.id ? Number(b.dataset.id) : undefined);
+                }));
+                updateMusicPanelProgress();
+            }
+
+            function openMusicPanel(x, y) {
+                closeUserVolumeMenu();
+                musicPanel.classList.remove('hidden');
+                renderMusicPanel();
+                const w = 360, h = Math.min(musicPanel.offsetHeight || 480, window.innerHeight - 16);
+                musicPanel.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + 'px';
+                musicPanel.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + 'px';
+                clearInterval(musicPanelTimer);
+                musicPanelTimer = setInterval(updateMusicPanelProgress, 500);
+            }
+            function closeMusicPanel() {
+                musicPanel.classList.add('hidden');
+                clearInterval(musicPanelTimer);
+                musicPanelTimer = null;
+            }
+            document.addEventListener('click', (e) => {
+                if (!musicPanel.classList.contains('hidden') && !musicPanel.contains(e.target)) closeMusicPanel();
+            });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMusicPanel(); });
 
             document.getElementById('btn-leave').addEventListener('click', () => {
                 if (!myVoiceChannel) return;
