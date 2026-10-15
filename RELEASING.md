@@ -16,25 +16,25 @@ Repositório de releases: https://github.com/ptkwan/screenshare-pro
    > que a que eles têm instalada. Esquecer de subir o número = ninguém recebe
    > a atualização.
 
-2. No terminal, dentro da pasta `client`, gere o token do GitHub e rode o release:
+2. Commite e envie pra `main`, crie a tag da versão e rode o release:
 
    ```bash
+   git tag v$(node -p "require('./package.json').version") && git push origin main --tags
    export GH_TOKEN=$(gh auth token)
    npm run release
    ```
 
-   Isso builda o instalador (`.exe`) e publica automaticamente uma nova
-   release no GitHub (`dist/` não precisa ser commitado — só o
-   `electron-builder` usa essa pasta).
+   > A tag precisa existir ANTES do `npm run release`: o electron-builder 26
+   > não cria mais a tag sozinho, e o GitHub recusa a release ("Published
+   > releases must have a valid tag") -- ela fica pela metade, sem o `.exe`.
 
-3. A release sobe como **draft** por padrão. Publique ela para os clientes
-   passarem a enxergá-la:
+   Isso builda o instalador (`.exe`) e publica a release no GitHub já como
+   publicada (`releaseType: release` no `package.json`) -- os amigos passam a
+   receber na hora. `dist/` não precisa ser commitado.
 
-   ```bash
-   gh release edit vX.Y.Z --repo ptkwan/screenshare-pro --draft=false
-   ```
-
-   (troque `vX.Y.Z` pela versão que você acabou de lançar, ex: `v1.0.2`)
+3. Se a versão mexe no servidor (`server.js`), publique o servidor no Render
+   **antes** do release -- app novo com servidor velho pode não conseguir
+   entrar.
 
 4. Pronto. Na próxima vez que cada amigo abrir o app (igual ao Discord):
    - a janelinha de inicialização mostra "Procurando atualizações...",
@@ -49,10 +49,10 @@ Repositório de releases: https://github.com/ptkwan/screenshare-pro
 
 ```bash
 cd client
-# 1. edite "version" em package.json antes de rodar isso
+# 1. edite "version" em package.json e commite antes de rodar isso
+git tag v$(node -p "require('./package.json').version") && git push origin main --tags
 export GH_TOKEN=$(gh auth token)
 npm run release
-gh release edit v$(node -p "require('./package.json').version") --repo ptkwan/screenshare-pro --draft=false
 ```
 
 ## Quando é preciso mandar o instalador manualmente de novo

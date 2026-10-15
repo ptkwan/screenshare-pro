@@ -4,6 +4,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeApp: () => ipcRenderer.send('close-app'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     getSources: () => ipcRenderer.invoke('GET_SOURCES'),
+
+    // Configurações do app (aceleração de hardware / método de captura) e
+    // diagnóstico pra tela preta
+    getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
+    setAppSetting: (key, value) => ipcRenderer.invoke('set-app-setting', key, value),
+    restartApp: () => ipcRenderer.send('restart-app'),
+    getDiagnostics: () => ipcRenderer.invoke('get-diagnostics'),
+    // Método de captura alternativo: avisa qual fonte entregar pro getDisplayMedia
+    prepareDisplayMedia: (sourceId, audio) => ipcRenderer.invoke('prepare-display-media', { sourceId, audio }),
     // Nova função para receber o IP do servidor
     onServerFound: (callback) => ipcRenderer.on('server-found', (event, url) => callback(url)),
 

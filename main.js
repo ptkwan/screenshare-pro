@@ -1,10 +1,36 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, Notification, session, screen } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 process.on('uncaughtException', (error) => console.error('Erro Crítico:', error));
 process.on('unhandledRejection', (reason) => console.error('Promessa Rejeitada:', reason));
+
+// ==========================================
+// CONFIGURAÇÕES DO APP (igual às do Discord pra tela preta): aceleração de
+// hardware e método de captura de tela. Ficam num JSON na pasta de dados do
+// app; a aceleração precisa ser decidida ANTES do app iniciar, por isso é
+// lida aqui no topo (mudar ela pede reiniciar).
+// ==========================================
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'app-settings.json');
+const DEFAULT_SETTINGS = { hardwareAcceleration: true, captureMethod: 'legacy' };
+const ALLOWED_SETTINGS = {
+    hardwareAcceleration: v => typeof v === 'boolean',
+    captureMethod: v => v === 'legacy' || v === 'modern',
+};
+
+function loadAppSettings() {
+    try {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    } catch (e) {
+        return { ...DEFAULT_SETTINGS };
+    }
+}
+let appSettings = loadAppSettings();
+// O que vale NESSA execução (a aceleração só muda depois de reiniciar)
+const hardwareAccelerationAtStartup = appSettings.hardwareAcceleration !== false;
+if (!hardwareAccelerationAtStartup) app.disableHardwareAcceleration();
 
 let mainWindow;
 let activeCapture = null; // instância do LoopbackCapture em uso no momento (só uma por vez)
@@ -12,6 +38,8 @@ let activeCapture = null; // instância do LoopbackCapture em uso no momento (s�
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
+        minWidth: 940, // mesmo mínimo do Discord: abaixo disso as 3 colunas não cabem
+        minHeight: 500,
         height: 720,
         backgroundColor: '#313338', // evita o "flash" branco antes da página carregar
         webPreferences: {
@@ -127,7 +155,86 @@ function startUpdateCheck() {
     autoUpdater.checkForUpdates().catch(() => { /* já tratado no 'error' */ });
 }
 
+// Método de captura "alternativo": o renderer chama getDisplayMedia (outro
+// caminho de captura do Chromium, diferente do getUserMedia+chromeMediaSource
+// antigo) e aqui entregamos a fonte que a pessoa já escolheu na janela
+// "Compartilhar tela" do próprio app -- sem abrir o seletor do sistema.
+let pendingDisplaySource = null; // { sourceId, audio }
+
+ipcMain.handle('prepare-display-media', (event, payload) => {
+    const sourceId = typeof payload?.sourceId === 'string' ? payload.sourceId : null;
+    pendingDisplaySource = sourceId ? { sourceId, audio: payload.audio === true } : null;
+    return !!pendingDisplaySource;
+});
+
+function setupDisplayMediaHandler() {
+    session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+        const pending = pendingDisplaySource;
+        pendingDisplaySource = null;
+        try {
+            if (!pending) return callback({});
+            const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
+            const source = sources.find(s => s.id === pending.sourceId);
+            if (!source) return callback({});
+            callback(pending.audio ? { video: source, audio: 'loopback' } : { video: source });
+        } catch (e) {
+            console.error('Falha ao entregar a fonte de captura:', e);
+            callback({});
+        }
+    });
+}
+
+ipcMain.handle('get-app-settings', () => ({ ...appSettings, hardwareAccelerationActive: hardwareAccelerationAtStartup }));
+
+ipcMain.handle('set-app-setting', (event, key, value) => {
+    if (!ALLOWED_SETTINGS[key] || !ALLOWED_SETTINGS[key](value)) return false;
+    appSettings = { ...appSettings, [key]: value };
+    try {
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(appSettings, null, 2));
+        return true;
+    } catch (e) {
+        console.error('Falha ao salvar configurações:', e);
+        return false;
+    }
+});
+
+ipcMain.on('restart-app', () => {
+    app.relaunch();
+    app.exit(0);
+});
+
+// Diagnóstico pra tela preta: placas de vídeo (qual está ativa), aceleração e
+// monitores (HDR / 10 bits). Vai pro log do servidor quando a transmissão
+// sai preta -- é o que dá pra ver das máquinas dos amigos sem estar lá.
+const GPU_VENDORS = { 0x10de: 'NVIDIA', 0x8086: 'Intel', 0x1002: 'AMD' };
+ipcMain.handle('get-diagnostics', async () => {
+    let gpus = [];
+    try {
+        const info = await app.getGPUInfo('basic');
+        gpus = (info.gpuDevice || []).map(g => ({
+            vendor: GPU_VENDORS[g.vendorId] || `0x${(g.vendorId || 0).toString(16)}`,
+            active: !!g.active,
+            driver: g.driverVersion || null,
+        }));
+    } catch (e) { /* sem info de GPU */ }
+    const displays = screen.getAllDisplays().map(d => ({
+        size: `${d.size.width}x${d.size.height}`,
+        scale: d.scaleFactor,
+        bitsPerComponent: d.depthPerComponent,
+        colorSpace: d.colorSpace || null,
+    }));
+    return {
+        version: app.getVersion(),
+        hardwareAcceleration: hardwareAccelerationAtStartup,
+        captureMethod: appSettings.captureMethod,
+        gpuCompositing: app.getGPUFeatureStatus().gpu_compositing,
+        gpus,
+        displays,
+    };
+});
+
 app.whenReady().then(() => {
+    setupDisplayMediaHandler();
     // Em modo dev (npm start) não tem o que atualizar -- abre direto
     if (!app.isPackaged) {
         createWindow();

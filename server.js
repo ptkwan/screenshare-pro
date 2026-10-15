@@ -743,18 +743,33 @@ io.on('connection', (socket) => {
     io.to(target).emit('ice-candidate', { sender: socket.id, candidate });
   });
 
+  // Quem assiste avisa quem transmite que a tela está chegando preta (ou não
+  // chega imagem nenhuma) -- só quem transmite pode resolver isso do lado dele
+  // (aceleração de hardware / método de captura).
+  socket.on('stream-problem', ({ target, kind } = {}) => {
+    if (!isRoommate(socket, target)) return;
+    if (kind !== 'black' && kind !== 'no-frames') return;
+    console.log(`[tela-preta] ${socket.data.username} vê a transmissão de ${io.sockets.sockets.get(target)?.data.username} como: ${kind}`);
+    io.to(target).emit('stream-problem', { from: socket.id, kind });
+  });
+
   // Limite por socket -- sem isso, qualquer um conseguia inundar o log do
-  // servidor (e esconder o que importa no painel do Render).
+  // servidor (e esconder o que importa no painel do Render). Cota separada
+  // pra avisos/erros: os logs informativos de conexão (ICE) gastavam a cota
+  // toda e o diagnóstico de tela preta era descartado.
   let clientLogWindowStart = 0;
-  let clientLogCount = 0;
+  const clientLogCounts = { info: 0, problem: 0 };
   socket.on('client-log', ({ level, message } = {}) => {
     const now = Date.now();
     if (now - clientLogWindowStart > CLIENT_LOG_WINDOW_MS) {
       clientLogWindowStart = now;
-      clientLogCount = 0;
+      clientLogCounts.info = 0;
+      clientLogCounts.problem = 0;
     }
-    if (++clientLogCount > CLIENT_LOG_MAX_PER_WINDOW) return;
-    console.log(`[client-log:${level || 'info'}] ${socket.data.username || socket.id}: ${String(message).slice(0, 500)}`);
+    const isProblem = level === 'warn' || level === 'error';
+    if (++clientLogCounts[isProblem ? 'problem' : 'info'] > CLIENT_LOG_MAX_PER_WINDOW) return;
+    const maxLength = isProblem ? 1000 : 500; // diagnóstico de tela preta é maior
+    console.log(`[client-log:${level || 'info'}] ${socket.data.username || socket.id}: ${String(message).slice(0, maxLength)}`);
   });
 
   socket.on('disconnect', (reason) => {

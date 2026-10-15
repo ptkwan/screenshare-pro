@@ -8,6 +8,48 @@ sessão.
 
 ## 2026-10-15
 
+### Layout sobrepondo em janelas pequenas e sobrando espaço nas grandes
+- **Sintoma**: "muita sobreposição, mal otimizado". Em janelas estreitas as
+  duas barras laterais espremiam o meio (abaixo de ~900px os botões da
+  chamada se sobrepunham); os cards da chamada tinham tamanho fixo (sobrava
+  tela preta no monitor grande, avatar encostava no nome no pequeno); a
+  fileira de cards durante uma transmissão era cortada na esquerda e o botão
+  "Parar de assistir" cobria o nome; a versão fixa no canto encostava no
+  botão de tela cheia; o chat não ficava no fim ao redimensionar.
+- **Correção**: janela com tamanho mínimo (940x500, igual ao Discord); lista
+  de membros some sozinha abaixo de 1200px (volta pelo botão de membros);
+  grade de cards calculada pra encher o espaço (`layoutVoiceTiles`); fileira
+  com `justify-content: safe center` e botão só com ícone; controles da
+  chamada em 3 colunas; versão no rodapé das configurações; chat "grudado"
+  no fim.
+- **Validado** com fotos automáticas em 940x540, 1280x720 e 1920x1040
+  (chat, chamada com 3 pessoas, transmissão, compartilhar, configurações).
+
+### Transmissão de tela chegava preta pra quem assiste (alguns PCs com NVIDIA)
+- **Sintoma**: em 3 máquinas (PC com placa NVIDIA dedicada), quem assistia
+  via só preto, em qualquer coisa transmitida; nas outras funcionava.
+- **Causa provável**: a captura (ou a codificação do vídeo pela placa) sai
+  preta nessas máquinas -- mesmo problema que o Discord tem. O app só tinha
+  um caminho de captura (getUserMedia + chromeMediaSource) e nenhum aviso.
+- **Correção** (igual às opções do Discord):
+  - Método de captura alternativo (getDisplayMedia, outro caminho do Chromium),
+    em Configurações → Voz e vídeo.
+  - "Aceleração de hardware" em Configurações → Avançado (pede reiniciar).
+  - Detecção automática: nos primeiros segundos, se a captura sai preta, tenta
+    sozinho o outro método; se os dois saírem pretos, mostra a ajuda. Quem
+    assiste também detecta e avisa quem transmite (evento `stream-problem`).
+  - Diagnóstico pro log do servidor (`[tela-preta]`): placas de vídeo, HDR,
+    aceleração e método usado.
+- **Validado** com teste automatizado transmitindo uma janela toda preta e
+  com a aceleração desligada. **Não validado** nas máquinas dos amigos --
+  conferir o log `[tela-preta]` no Render depois que eles atualizarem.
+
+### Avisos do app eram descartados pelo limite do client-log
+- **Causa**: o limite de 30 logs/min por conexão era um só pra tudo; os logs
+  informativos de conexão (ICE) gastavam a cota e o diagnóstico de tela preta
+  não chegava no servidor.
+- **Correção**: cota separada pra avisos/erros.
+
 ### Falha ao ler o Redis apagava os dados do servidor
 - **Causa**: se `loadRoomsFromRedis` falhasse (Upstash fora do ar, timeout),
   o servidor seguia só com a memória vazia -- e a primeira gravação
