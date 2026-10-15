@@ -3247,7 +3247,8 @@
                     sources.forEach(s => {
                         const div = document.createElement('div');
                         div.className = 'screen-option bg-zinc-950 border border-zinc-700 rounded-lg p-2 cursor-pointer transition-all flex flex-col gap-2';
-                        div.innerHTML = `<img src="${s.thumbnail}" class="rounded w-full h-24 object-cover border border-zinc-800"><span class="text-xs text-center truncate text-zinc-300 font-medium">${s.name}</span>`;
+                        // Título de janela vem de fora (ex: título de uma aba do navegador) -- escapa
+                        div.innerHTML = `<img src="${escapeHtml(s.thumbnail)}" class="rounded w-full h-24 object-cover border border-zinc-800"><span class="text-xs text-center truncate text-zinc-300 font-medium">${escapeHtml(s.name)}</span>`;
                         div.onclick = () => startScreenShare(s.id, selectedAudioMode);
                         sourcesList.appendChild(div);
                     });

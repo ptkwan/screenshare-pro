@@ -32,6 +32,13 @@ sessão.
   novo). Nomes repetidos na mesma sala ganham sufixo ("Bia (2)"), exceto se
   for a mesma pessoa (mesmo token) numa sessão antiga ainda não derrubada.
 
+### Título de janela malicioso rodava JavaScript no seletor de telas
+- **Causa**: o seletor de "o que compartilhar" montava `${s.name}` (título da
+  janela) direto no `innerHTML`. Título de janela vem de fora -- uma aba do
+  navegador com título tipo `<img src=x onerror=...>` rodava JS no app ao
+  abrir o seletor.
+- **Correção**: `escapeHtml()` no nome e na miniatura.
+
 ### Outros
 - Senha de sala: SHA-256 sem salt → scrypt com salt. Hash antigo continua
   aceito e é trocado pelo novo no primeiro acerto.
