@@ -141,6 +141,8 @@
         .menu-item.hidden { display: none; }
         #music-panel { width: 360px; max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: #111214; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.5); overflow: hidden; }
         #music-panel.hidden { display: none; }
+        #music-panel-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+        .music-panel-footer { padding: 10px 12px 8px; border-top: 1px solid #2b2d31; }
         .music-panel-header { display: flex; align-items: center; gap: 10px; padding: 12px; background: #1e1f22; }
         .music-now { padding: 12px; border-bottom: 1px solid #2b2d31; }
         .music-now-title { font-weight: 600; color: #f2f3f5; line-height: 1.3; }
@@ -653,7 +655,17 @@
     </div>
 
     <!-- FILA DE MÚSICAS DO DJ QUARTONHA (clique no bot no canal de voz) -->
-    <div id="music-panel" class="hidden fixed z-50"></div>
+    <div id="music-panel" class="hidden fixed z-50">
+        <div id="music-panel-body"></div>
+        <div class="music-panel-footer">
+            <div class="text-sm font-medium text-zinc-300 mb-2">Volume do bot (só pra você)</div>
+            <div class="flex items-center gap-2">
+                <input type="range" id="music-panel-volume" min="0" max="200" value="100" class="volume-slider flex-1">
+                <span id="music-panel-volume-value" class="text-xs text-zinc-300 w-10 text-right flex-shrink-0">100%</span>
+            </div>
+            <button type="button" id="music-panel-disconnect" class="menu-item menu-item-danger mt-2">Desconectar DJ Quartonha</button>
+        </div>
+    </div>
 
     <!-- PERFIL DO MEMBRO (clique no nome/avatar, igual ao Discord) -->
     <div id="profile-popout" class="hidden fixed z-50 w-[300px] bg-[#232428] rounded-lg shadow-2xl overflow-hidden"></div>
@@ -1709,11 +1721,6 @@
 
             document.getElementById('user-volume-menu-kick').addEventListener('click', () => {
                 if (!volumeMenuPeerId) return;
-                if (volumeMenuPeerId === MUSIC_BOT_ID) {
-                    closeUserVolumeMenu();
-                    socket.emit('music-bot-disconnect');
-                    return;
-                }
                 const name = volumeMenuPeerName || 'esse participante';
                 const peerId = volumeMenuPeerId;
                 closeUserVolumeMenu();
@@ -1745,11 +1752,6 @@
                 const pct = Number(userVolumeSlider.value);
                 userVolumeValue.textContent = pct + '%';
                 userVolumes[volumeMenuPeerId] = pct / 100;
-                if (volumeMenuPeerId === MUSIC_BOT_ID) {
-                    applyMusicVolume();
-                    try { localStorage.setItem('ssp-music-bot-volume', String(pct / 100)); } catch (e) { /* ignora */ }
-                    return;
-                }
                 applyGainForUser(volumeMenuPeerId);
             });
 
@@ -2059,7 +2061,7 @@
                     if (musicBotState && musicBotState.voiceChannel === ch) {
                         const row = document.createElement('div');
                         row.className = 'voice-member-row';
-                        row.title = 'Clique: fila de músicas · Clique direito: volume do bot / desconectar';
+                        row.title = 'Fila de músicas, volume e desconectar';
                         row.innerHTML = `
                             ${MUSIC_BOT_AVATAR_HTML('w-6 h-6 text-sm')}
                             <span class="vm-name">DJ Quartonha<span class="vm-bot-title">${escapeHtml(musicBotState.title || 'preparando...')}</span></span>
@@ -2194,7 +2196,7 @@
                 if (musicBotState && musicBotState.voiceChannel === myVoiceChannel) {
                     const tile = document.createElement('div');
                     tile.className = 'voice-tile';
-                    tile.title = 'Clique: fila de músicas · Clique direito: volume do bot / desconectar';
+                    tile.title = 'Fila de músicas, volume e desconectar';
                     tile.style.cursor = 'pointer';
                     tile.addEventListener('click', (e) => { e.stopPropagation(); openMusicPanel(e.clientX, e.clientY); });
                     tile.innerHTML = `
@@ -4194,20 +4196,12 @@
             });
 
             const MUSIC_BOT_AVATAR_HTML = (size) => `<div class="music-bot-avatar ${size}"><i class="ph-fill ph-music-notes"></i></div>`;
-            function openMusicBotMenu(x, y) {
-                openUserVolumeMenu(MUSIC_BOT_ID, 'DJ Quartonha', false, x, y);
-                document.getElementById('user-volume-menu-name').textContent = 'Volume do bot (só pra você)';
-                document.getElementById('user-volume-menu-profile').classList.add('hidden');
-                document.getElementById('user-volume-menu-admin').classList.add('hidden');
-                const kick = document.getElementById('user-volume-menu-kick');
-                kick.textContent = 'Desconectar DJ Quartonha';
-                kick.closest('div').classList.remove('hidden');
-            }
+            // Clique esquerdo ou direito no bot: o mesmo painel (fila, volume, desconectar)
             function attachMusicBotMenu(el) {
                 el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    openMusicBotMenu(e.clientX, e.clientY);
+                    openMusicPanel(e.clientX + 8, e.clientY - 40);
                 });
             }
 
@@ -4315,7 +4309,7 @@
                     <button class="music-icon-btn" data-cmd="jump" data-id="${m.id}" title="Tocar de novo"><i class="ph ph-arrow-counter-clockwise"></i></button>`)).join('');
                 const resolving = q.resolving ? `<div class="music-empty"><i class="ph ph-spinner-gap animate-spin"></i> Baixando ${q.resolving} música${q.resolving > 1 ? 's' : ''}...</div>` : '';
 
-                musicPanel.innerHTML = `
+                musicPanelBody.innerHTML = `
                     <div class="music-panel-header">
                         <div class="music-bot-avatar w-10 h-10 text-xl"><i class="ph-fill ph-music-notes"></i></div>
                         <div class="min-w-0 flex-1">
@@ -4346,7 +4340,7 @@
                     </div>
                 `;
                 document.getElementById('music-panel-close').addEventListener('click', closeMusicPanel);
-                musicPanel.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', (e) => {
+                musicPanelBody.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (b.dataset.cmd === 'stop' && !confirm('Parar a música e limpar a fila?')) return;
                     musicControl(b.dataset.cmd, b.dataset.id ? Number(b.dataset.id) : undefined);
@@ -4354,8 +4348,27 @@
                 updateMusicPanelProgress();
             }
 
+            const musicPanelBody = document.getElementById('music-panel-body');
+            const musicVolumeSlider = document.getElementById('music-panel-volume');
+            const musicVolumeValue = document.getElementById('music-panel-volume-value');
+            musicVolumeSlider.addEventListener('input', () => {
+                const pct = Number(musicVolumeSlider.value);
+                musicVolumeValue.textContent = pct + '%';
+                userVolumes[MUSIC_BOT_ID] = pct / 100;
+                applyMusicVolume();
+                try { localStorage.setItem('ssp-music-bot-volume', String(pct / 100)); } catch (e) { /* ignora */ }
+            });
+            document.getElementById('music-panel-disconnect').addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeMusicPanel();
+                socket.emit('music-bot-disconnect');
+            });
+
             function openMusicPanel(x, y) {
                 closeUserVolumeMenu();
+                const pct = Math.round((userVolumes[MUSIC_BOT_ID] ?? 1.0) * 100);
+                musicVolumeSlider.value = pct;
+                musicVolumeValue.textContent = pct + '%';
                 musicPanel.classList.remove('hidden');
                 renderMusicPanel();
                 const w = 360, h = Math.min(musicPanel.offsetHeight || 480, window.innerHeight - 16);
