@@ -8,6 +8,22 @@ sessão.
 
 ## 2026-10-15
 
+### Depois de qualquer reconexão a sala ficava "fantasma" (canais sumiam)
+- **Sintoma**: no meio da chamada a transmissão parava, e no primeiro clique
+  as listas de canais de texto e voz ficavam vazias; não dava pra fazer nada
+  até fechar o app. Aconteceu com todo mundo no deploy do servidor no Render.
+- **Causa**: o `joinRoom()` passou a sair cedo quando o socket não está
+  conectado (`if (!socket.connected) { socket.connect(); return; }`), mas a
+  reentrada depois de reconectar era chamada no `reconnect` do Manager do
+  socket.io, que dispara ANTES do socket conectar. O app limpava a tela
+  (parando a transmissão e a chamada) e nunca reentrava: o servidor não
+  sabia mais que a pessoa estava lá.
+- **Correção**: a reentrada agora acontece no `connect` (quando há
+  `currentRoom`) e o app volta sozinho pro canal de voz em que estava.
+- **Validado** com teste automatizado (Electron 44 + servidor local derrubado
+  e religado): antes, o servidor ficava sem ninguém na sala depois da
+  reconexão; agora a pessoa volta pra sala e pra "Sala 1".
+
 ### "Compartilhar tela" só mostrava tela inteira (aplicativos não apareciam)
 - **Sintoma**: na aba "Aplicativos" faltavam os programas abertos (Chrome,
   Discord, jogos...).

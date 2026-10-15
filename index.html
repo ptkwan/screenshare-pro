@@ -723,6 +723,7 @@
             let isSharing = false;
             let localStream = null;
             let currentRoom = null;
+            let pendingVoiceRejoin = null; // canal de voz pra voltar depois de uma reconexão
             let selectedAudioMode = 'none';
             let mutedBeforeSystemShare = null; // guarda o estado de mudo de antes, pra restaurar depois
 
@@ -3073,7 +3074,17 @@
                 socket.emit('get-rooms');
                 // Igual ao Discord: entra direto no servidor. Só na primeira vez
                 // (sem nome salvo) pergunta como a pessoa quer ser chamada.
-                if (!hasEnteredRoom && !currentRoom) {
+                if (currentRoom) {
+                    // Reconexão de transporte (wifi cair um instante, deploy/hibernação
+                    // do Render) dá um socket.id NOVO -- o servidor não tem mais esse
+                    // socket em sala nenhuma. Reentra na sala e volta pro canal de voz
+                    // em que estava (igual ao Discord). Tem que ser aqui no 'connect':
+                    // o 'reconnect' do Manager dispara ANTES do socket conectar, e o
+                    // joinRoom() só limpava a tela sem reentrar (sala sem canais).
+                    reportLog('info', `Reconectado -- reentrando na sala "${currentRoom}" pra não ficar fantasma`);
+                    pendingVoiceRejoin = myVoiceChannel || pendingVoiceRejoin;
+                    joinRoom();
+                } else if (!hasEnteredRoom) {
                     if (localStorage.getItem('ssp-username')) joinRoom();
                     else showConnectForm();
                 }
@@ -3091,24 +3102,6 @@
                             console.log(`[turn] ${turnServers.length} servidor(es) TURN carregado(s).`);
                         }
                     });
-                }
-            });
-
-            // Reconexão de transporte (wifi cair um instante, servidor Render
-            // hibernando, etc.) dá um socket.id NOVO -- o servidor não tem mais
-            // nenhum registro desse socket em nenhuma sala (o antigo já foi
-            // removido pelo 'disconnect'). Sem isso, o cliente ficava "fantasma":
-            // a sidebar continuava mostrando a sala/canal de voz normalmente, mas
-            // o servidor não contava mais essa pessoa como presente em lugar
-            // nenhum (mensagens, voz, contagem de participantes, tudo quebrado
-            // silenciosamente, sem nenhum erro visível). 'reconnect' (do Manager,
-            // via socket.io) só dispara numa reconexão de verdade -- nunca na
-            // primeira conexão -- então não interfere no fluxo normal de entrar
-            // numa sala pela primeira vez.
-            socket.io.on('reconnect', () => {
-                if (currentRoom) {
-                    reportLog('info', `Reconectado -- reentrando na sala "${currentRoom}" pra não ficar fantasma`);
-                    joinRoom(currentRoom);
                 }
             });
 
@@ -3239,6 +3232,12 @@
                 }
                 renderChannelSidebar();
                 renderMainView();
+                // Voltando de uma reconexão: entra de novo no canal de voz em que estava
+                if (pendingVoiceRejoin) {
+                    const ch = pendingVoiceRejoin;
+                    pendingVoiceRejoin = null;
+                    if (voiceChannels.includes(ch)) joinVoiceChannel(ch);
+                }
             });
 
             socket.on('channel-renamed', ({ oldName, newName }) => {
