@@ -20,67 +20,63 @@
     </script>
 
     <style>
-        body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; background: radial-gradient(ellipse 1200px 800px at 50% -10%, rgba(96, 165, 250, 0.05), transparent 60%), linear-gradient(180deg, #131110 0%, #0f0d0b 100%); color: #f3f1ee; margin: 0; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
+        body { font-family: "gg sans", "Noto Sans", "Segoe UI", system-ui, sans-serif; background: #313338; color: #dbdee1; margin: 0; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
 
         .video-stage { position: relative; width: 100%; height: 100%; }
         .video-grid { display: grid; gap: 12px; width: 100%; height: 100%; }
-        .video-tile { position: relative; background: #1c1917; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #2b2724; display: flex; align-items: center; justify-content: center; min-height: 0; min-width: 0; }
+        .video-tile { position: relative; background: #2b2d31; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; min-width: 0; }
         .video-tile video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.4s ease; }
         .video-tile video.active { opacity: 1; }
         .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 10; }
-        .tile-remove { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f3f1ee; }
-        .tile-fullscreen { position: absolute; top: 10px; right: 48px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f3f1ee; }
+        .tile-remove { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f2f3f5; }
+        .tile-fullscreen { position: absolute; top: 10px; right: 48px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; z-index: 10; color: #f2f3f5; }
         .video-tile:hover .tile-remove, .video-tile:hover .tile-fullscreen { opacity: 1; }
-        .live-dot-green { width: 8px; height: 8px; background-color: #22c55e; border-radius: 50%; flex-shrink: 0; }
+        .live-dot-green { width: 8px; height: 8px; background-color: #23a55a; border-radius: 50%; flex-shrink: 0; }
         .video-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; z-index: 5; }
         .voice-cta-icon {
             width: 88px; height: 88px; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
             font-size: 38px; margin-bottom: 4px;
             background: radial-gradient(circle at 32% 30%, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.04) 60%, transparent 72%);
-            border: 1px solid rgba(74, 222, 128, 0.35); color: #4ade80; box-shadow: 0 0 44px rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(74, 222, 128, 0.35); color: #2dc770; box-shadow: 0 0 44px rgba(34, 197, 94, 0.14);
         }
         .voice-cta-icon.idle {
             background: radial-gradient(circle at 32% 30%, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.04) 60%, transparent 72%);
-            border-color: rgba(96, 165, 250, 0.3); color: #60a5fa; box-shadow: 0 0 44px rgba(59, 130, 246, 0.12);
+            border-color: rgba(96, 165, 250, 0.3); color: #7984f5; box-shadow: 0 0 44px rgba(59, 130, 246, 0.12);
         }
-        .btn-join-call {
-            margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; background: #22c55e; color: #fff;
-            font-weight: 600; font-size: 14px; padding: 11px 24px; border-radius: 9999px; border: 1px solid #4ade80;
-            cursor: pointer; transition: all 0.15s ease;
-        }
-        .btn-join-call:hover { background: #16a34a; transform: translateY(-2px); box-shadow: 0 10px 24px rgba(34, 197, 94, 0.3); }
+        .btn-join-call { margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; background: #248046; color: #fff; font-weight: 500; font-size: 14px; padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; transition: background 0.15s ease; }
+        .btn-join-call:hover { background: #1a6334; }
         @keyframes pulse-ring { 0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-        .recording-indicator { width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; animation: pulse-ring 2s infinite; flex-shrink: 0; }
-        .control-btn { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background-color: #2b2724; color: #e6e2dc; border: 1px solid #453f38; cursor: pointer; transition: all 0.2s ease; }
-        .control-btn:hover { background-color: #453f38; transform: translateY(-2px); }
-        .control-btn.active-state { background-color: #3b82f6; border-color: #60a5fa; color: white; }
-        .control-btn.danger-state { background-color: #ef4444; border-color: #f87171; color: white; }
-        .control-btn.danger-state:hover { background-color: #dc2626; }
-        .control-btn.volume-active { background-color: #22c55e; border-color: #4ade80; color: white; }
-        .control-btn.volume-active:hover { background-color: #16a34a; }
+        .recording-indicator { width: 10px; height: 10px; background-color: #da373c; border-radius: 50%; animation: pulse-ring 2s infinite; flex-shrink: 0; }
+        .control-btn { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background-color: #2b2d31; color: #f2f3f5; border: none; cursor: pointer; transition: background-color 0.15s ease; }
+        .control-btn:hover { background-color: #404249; }
+        .control-btn.active-state { background-color: #23a55a; color: white; }
+        .control-btn.danger-state { background-color: #f2f3f5; color: #da373c; }
+        .control-btn.danger-state:hover { background-color: #dbdee1; }
+        .control-btn.volume-active { background-color: #2b2d31; color: #f2f3f5; }
+        .control-btn.volume-active:hover { background-color: #404249; }
         /* top: abaixo do header (56px) E do cabeçalho do painel de participantes
            (que começa com margem própria ali do lado) -- um toast em top:20px
            cobria o status de conexão, o botão de Aprovações e o título
            "Participantes". */
-        .toast { position: fixed; top: 148px; right: -320px; max-width: 320px; background: #1c1917; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: right 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 40; display: flex; align-items: center; gap: 12px; }
-        .toast.show { right: 20px; }
-        .screen-option:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .toast { position: fixed; top: 60px; right: -340px; max-width: 320px; background: #111214; padding: 12px 16px; border-radius: 8px; box-shadow: 0 8px 16px rgba(0,0,0,0.24); transition: right 0.25s ease; z-index: 40; display: flex; align-items: center; gap: 12px; }
+        .toast.show { right: 16px; }
+        .screen-option:hover { border-color: #5865f2; background: rgba(59, 130, 246, 0.1); }
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1c1917; }
-        ::-webkit-scrollbar-thumb { background: #453f38; border-radius: 10px; }
+        ::-webkit-scrollbar-track { background: #2b2d31; }
+        ::-webkit-scrollbar-thumb { background: #404249; border-radius: 10px; }
 
-        .audio-mode-btn { flex: 1; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; border: 1px solid #453f38; background: #1c1917; color: #a89e93; cursor: pointer; transition: all 0.15s ease; text-align: center; }
-        .audio-mode-btn:hover { border-color: #5a5249; color: #e6e2dc; }
-        .audio-mode-btn.active-mode { background: #3b82f6; border-color: #60a5fa; color: white; }
+        .audio-mode-btn { flex: 1; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; border: 1px solid #404249; background: #2b2d31; color: #949ba4; cursor: pointer; transition: all 0.15s ease; text-align: center; }
+        .audio-mode-btn:hover { border-color: #4e5058; color: #dbdee1; }
+        .audio-mode-btn.active-mode { background: #5865f2; border-color: #7984f5; color: white; }
 
-        input[type="range"].volume-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 999px; background: #453f38; outline: none; cursor: pointer; }
-        input[type="range"].volume-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: 2px solid #dbeafe; }
+        input[type="range"].volume-slider { -webkit-appearance: none; appearance: none; width: 96px; height: 4px; border-radius: 999px; background: #404249; outline: none; cursor: pointer; }
+        input[type="range"].volume-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #5865f2; cursor: pointer; border: 2px solid #ffffff; }
         input[type="range"].volume-slider:disabled { opacity: 0.4; cursor: not-allowed; }
         input[type="range"].volume-slider:disabled::-webkit-slider-thumb { cursor: not-allowed; }
 
         /* Estilos dos Botões da Lista */
         .btn-assistir {
-            background-color: #ef4444;
+            background-color: #da373c;
             color: white;
             font-size: 10px;
             font-weight: 700;
@@ -95,9 +91,9 @@
             gap: 4px;
             border: none;
         }
-        .btn-assistir:hover { background-color: #dc2626; }
+        .btn-assistir:hover { background-color: #a12828; }
         .btn-assistindo {
-            background-color: #22c55e;
+            background-color: #23a55a;
             color: white;
             font-size: 10px;
             font-weight: 700;
@@ -111,43 +107,43 @@
             border: none;
             transition: background 0.2s;
         }
-        .btn-assistindo:hover { background-color: #dc2626; }
+        .btn-assistindo:hover { background-color: #a12828; }
         .btn-assistindo:hover .btn-assistindo-label::before { content: "PARAR"; }
 
-        .quality-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid #453f38; background: #1c1917; cursor: pointer; transition: all 0.15s ease; }
-        .quality-option:hover { border-color: #5a5249; }
-        .quality-option.active-mode { border-color: #60a5fa; background: rgba(59, 130, 246, 0.12); }
-        .quality-option .qo-title { font-size: 13px; font-weight: 600; color: #e6e2dc; }
-        .quality-option .qo-desc { font-size: 11px; color: #a89e93; }
-        .quality-option .qo-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #5a5249; flex-shrink: 0; }
-        .quality-option.active-mode .qo-radio { border-color: #3b82f6; background: radial-gradient(circle, #3b82f6 0 40%, transparent 42%); }
+        .quality-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid #404249; background: #2b2d31; cursor: pointer; transition: all 0.15s ease; }
+        .quality-option:hover { border-color: #4e5058; }
+        .quality-option.active-mode { border-color: #7984f5; background: rgba(59, 130, 246, 0.12); }
+        .quality-option .qo-title { font-size: 13px; font-weight: 600; color: #dbdee1; }
+        .quality-option .qo-desc { font-size: 11px; color: #949ba4; }
+        .quality-option .qo-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #4e5058; flex-shrink: 0; }
+        .quality-option.active-mode .qo-radio { border-color: #5865f2; background: radial-gradient(circle, #5865f2 0 40%, transparent 42%); }
 
         /* Canais (texto e voz) */
-        .channel-item { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: #a89e93; font-size: 14px; transition: background 0.15s ease, color 0.15s ease; }
-        .channel-item:hover { background: #2b2724; color: #e6e2dc; }
-        .channel-item.active-channel { background: #453f38; color: #fff; }
-        .channel-item .ch-icon { font-size: 16px; flex-shrink: 0; color: #7d7468; }
-        .channel-item.active-channel .ch-icon { color: #e6e2dc; }
+        .channel-item { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 1px 0; border-radius: 4px; cursor: pointer; color: #949ba4; font-size: 16px; font-weight: 500; line-height: 20px; transition: background 0.1s ease, color 0.1s ease; }
+        .channel-item:hover { background: #35373c; color: #dbdee1; }
+        .channel-item.active-channel { background: #404249; color: #f2f3f5; }
+        .channel-item .ch-icon { font-size: 20px; flex-shrink: 0; color: #80848e; }
+        .channel-item.active-channel .ch-icon { color: #dbdee1; }
         /* Barrinha de destaque à esquerda do canal ativo, tipo Discord */
         .channel-item.active-channel::before {
             content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
-            width: 3px; height: 60%; border-radius: 0 4px 4px 0; background: #60a5fa;
+            width: 3px; height: 60%; border-radius: 0 4px 4px 0; background: #7984f5;
         }
-        .voice-member-row { display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 20px; font-size: 12px; color: #a89e93; }
+        .voice-member-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 1px 0 1px 28px; border-radius: 4px; font-size: 14px; font-weight: 500; color: #949ba4; }
+        .voice-member-row:hover { background: #35373c; color: #dbdee1; }
 
         /* Chat de texto */
-        .chat-message { position: relative; display: flex; gap: 12px; padding: 3px 8px; margin: 0 -8px; border-radius: 8px; transition: background 0.1s ease; }
-        .chat-message:hover { background: rgba(255, 255, 255, 0.025); }
+        .chat-message { position: relative; display: flex; gap: 16px; padding: 2px 16px; margin: 0 -16px; transition: background 0.05s ease; }
+        .chat-message:hover { background: #2e3035; }
         .chat-message .cm-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; }
         .chat-message .cm-header { display: flex; align-items: baseline; gap: 8px; }
-        .chat-message .cm-name { font-weight: 600; font-size: 14px; color: #e6e2dc; }
-        .chat-message .cm-time { font-size: 11px; color: #7d7468; }
-        .chat-message .cm-text { font-size: 14px; line-height: 1.45; color: #d3cdc4; white-space: pre-wrap; word-break: break-word; }
-        .chat-message .cm-image { max-width: 320px; max-height: 320px; margin-top: 4px; border-radius: 8px; border: 1px solid #2b2724; cursor: zoom-in; display: block; object-fit: contain; background: #0f0d0b; transition: border-color 0.15s ease; }
-        .chat-message .cm-image:hover { border-color: #5a5249; }
+        .chat-message .cm-name { font-weight: 500; font-size: 16px; color: #f2f3f5; }
+        .chat-message .cm-time { font-size: 12px; color: #949ba4; }
+        .chat-message .cm-text { font-size: 16px; line-height: 1.375; color: #dbdee1; white-space: pre-wrap; word-break: break-word; }
+        .chat-message .cm-image { max-width: 320px; max-height: 320px; margin-top: 4px; border-radius: 8px; border: 1px solid #35373c; cursor: zoom-in; display: block; object-fit: contain; background: #1e1f22; transition: border-color 0.15s ease; }
+        .chat-message .cm-image:hover { border-color: #4e5058; }
 
         .control-btn.disabled-btn { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-        .control-btn { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 6px rgba(0, 0, 0, 0.25); }
 
         /* Avatar: anel verde tipo Discord enquanto a pessoa está falando */
         .avatar-badge { transition: box-shadow 0.1s ease-out; box-shadow: 0 0 0 0 transparent; }
@@ -164,7 +160,7 @@
         .brand-name {
             font-weight: 800;
             letter-spacing: 0.01em;
-            background: linear-gradient(120deg, #c084fc 0%, #60a5fa 55%, #22d3ee 100%);
+            background: linear-gradient(120deg, #c084fc 0%, #7984f5 55%, #22d3ee 100%);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -172,21 +168,30 @@
         }
 
         /* Cabeçalho: leve sombra pra separar do conteúdo (mais profundidade) */
-        header { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px -8px rgba(0, 0, 0, 0.5); }
+        .channel-topbar { box-shadow: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05); }
 
         /* Bolinha verde de "online" no seu avatar, no painel fixo da sidebar (tipo Discord) */
         #own-user-avatar-wrap .avatar-wrap::after {
             content: ''; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px;
-            border-radius: 50%; background: #23a55a; border: 2px solid #131110;
+            border-radius: 50%; background: #23a55a; border: 2px solid #232428;
         }
 
         /* Divisor entre as salas conhecidas e o botão de "entrar/criar sala" na barra de servidores */
-        .server-rail-divider { width: 32px; height: 1px; background: #2b2724; flex-shrink: 0; margin: 2px 0; }
+        .server-rail-divider { width: 32px; height: 2px; border-radius: 1px; background: #35373c; flex-shrink: 0; margin: 0 0 0 0; }
 
         /* Leve vinheta no palco de vídeo, pra não ficar um preto totalmente chapado */
-        .video-stage { background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.025), transparent 65%); border-radius: 16px; }
+        .video-stage { background: transparent; }
 
-        ::-webkit-scrollbar-thumb:hover { background: #5a5249; }
+        /* Cabeçalho das categorias de canais ("CANAIS DE TEXTO") */
+        .channel-category { display: flex; align-items: center; gap: 2px; padding: 0 2px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: #949ba4; cursor: default; }
+        .channel-category:hover { color: #dbdee1; }
+        /* Itens do menu de configurações do painel do usuário */
+        .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 4px; font-size: 14px; font-weight: 500; color: #b5bac1; text-align: left; }
+        .menu-item:hover { background: #5865f2; color: #fff; }
+        /* Botão vermelho de desconectar da chamada */
+        .control-btn.leave-btn { background-color: #da373c; color: #fff; }
+        .control-btn.leave-btn:hover { background-color: #a12828; }
+        ::-webkit-scrollbar-thumb:hover { background: #4e5058; }
     </style>
 </head>
 <body class="flex flex-col">
@@ -195,7 +200,7 @@
 
     <!-- MODAL DE CONEXÃO -->
     <div id="connection-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4 relative">
+        <div class="bg-[#313338] p-6 rounded-lg w-96 shadow-2xl flex flex-col gap-4 relative">
             <button id="btn-close-connection-modal" class="hidden absolute top-4 right-4 text-zinc-500 hover:text-white" title="Fechar"><i class="ph ph-x text-lg"></i></button>
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-users-three text-blue-500"></i> Bem-vindo</h2>
             <div id="discovery-status" class="text-sm text-yellow-500 flex items-center gap-2 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">
@@ -220,7 +225,7 @@
     <!-- MODAL DEDICADO: pedir a senha de uma sala protegida (bem mais visível
          que só um campo dentro do formulário de criar sala) -->
     <div id="room-password-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-96 shadow-2xl flex flex-col gap-4">
+        <div class="bg-[#313338] p-6 rounded-lg w-96 shadow-2xl flex flex-col gap-4">
             <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-lock-simple text-amber-500"></i> Sala protegida por senha</h2>
             <p class="text-sm text-zinc-400">A sala "<strong id="room-password-modal-name"></strong>" pede uma senha pra entrar.</p>
             <form id="room-password-form" class="flex flex-col gap-3">
@@ -236,7 +241,7 @@
 
     <!-- MODAL DE SELEÇÃO DE TELA -->
     <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[700px] max-w-[90vw] shadow-2xl">
+        <div class="bg-[#313338] p-6 rounded-lg w-[700px] max-w-[90vw] shadow-2xl">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-monitor text-blue-500"></i> Selecione o que compartilhar</h2>
                 <button id="btn-close-screen-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
@@ -261,7 +266,7 @@
 
     <!-- MODAL DE QUALIDADE DE VÍDEO -->
     <div id="quality-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
             <div class="flex justify-between items-center">
                 <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-gear-six text-blue-500"></i> Qualidade de Vídeo</h2>
                 <button id="btn-close-quality-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
@@ -274,7 +279,7 @@
 
     <!-- MODAL DE DISPOSITIVO DE SAÍDA DO CHAT DE VOZ -->
     <div id="audio-output-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
             <div class="flex justify-between items-center">
                 <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-waveform text-blue-500"></i> Saída do Chat de Voz</h2>
                 <button id="btn-close-audio-output-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
@@ -285,7 +290,7 @@
     </div>
 
     <div id="audio-input-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden items-center justify-center">
-        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
+        <div class="bg-[#313338] p-6 rounded-lg w-[420px] max-w-[90vw] shadow-2xl flex flex-col gap-4">
             <div class="flex justify-between items-center">
                 <h2 class="text-xl font-bold flex items-center gap-2"><i class="ph ph-microphone text-blue-500"></i> Microfone</h2>
                 <button id="btn-close-audio-input-modal" class="text-zinc-400 hover:text-white"><i class="ph ph-x text-xl"></i></button>
@@ -298,87 +303,94 @@
     <!-- ÁUDIO DO CHAT DE VOZ (elementos <audio> ocultos, um por participante) -->
     <div id="voice-audio-container" style="display:none"></div>
 
-    <!-- HEADER (marca + contexto do canal atual + status) -->
-    <header class="flex-shrink-0 h-14 px-5 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-20">
-        <div class="flex items-center gap-3 min-w-0">
-            <img src="assets/logo.png" class="w-9 h-9 rounded-lg object-cover flex-shrink-0" alt="Streama AI">
-            <h1 class="text-lg brand-name tracking-wide flex-shrink-0">Streama AI</h1>
-            <div class="w-px h-5 bg-zinc-800 flex-shrink-0"></div>
-            <div id="channel-header" class="flex items-center gap-2 text-zinc-200 text-sm font-semibold min-w-0"></div>
-        </div>
-        <div class="flex items-center gap-4 text-sm text-zinc-400 flex-shrink-0">
-            <div id="connection-status" class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1.5">
-                <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
-                <span id="status-text">Desconectado</span>
-            </div>
-        </div>
-    </header>
-
-    <!-- MAIN -->
+    <!-- LAYOUT (estilo Discord): servidores | canais | conteúdo | membros -->
     <main class="flex-1 flex min-h-0 relative">
 
         <!-- BARRA DE SERVIDORES CONHECIDOS (troca rápida entre salas) -->
-        <aside id="server-rail" class="w-[72px] h-full bg-zinc-950 border-r border-zinc-800 flex flex-col items-center flex-shrink-0 py-3 gap-2 overflow-y-auto hidden md:flex">
-            <div id="server-rail-list" class="flex flex-col gap-2 items-center"></div>
+        <aside id="server-rail" class="w-[72px] h-full bg-zinc-950 flex flex-col items-center flex-shrink-0 py-3 gap-2 overflow-y-auto hidden md:flex">
+            <img src="assets/logo.png" class="w-12 h-12 rounded-[16px] object-cover flex-shrink-0" alt="Streama AI" title="Streama AI">
             <div class="server-rail-divider"></div>
-            <button id="btn-server-rail-add" class="w-11 h-11 rounded-3xl bg-zinc-800 text-emerald-400 hover:rounded-2xl hover:bg-emerald-600 hover:text-white transition-all duration-150 flex items-center justify-center flex-shrink-0" title="Entrar em outra sala / criar nova">
-                <i class="ph ph-plus text-xl"></i>
+            <div id="server-rail-list" class="flex flex-col gap-2 items-center w-full"></div>
+            <button id="btn-server-rail-add" class="w-12 h-12 rounded-[24px] bg-[#313338] text-emerald-500 hover:rounded-[16px] hover:bg-emerald-500 hover:text-white transition-all duration-150 flex items-center justify-center flex-shrink-0" title="Entrar em outra sala / criar nova">
+                <i class="ph ph-plus text-2xl"></i>
             </button>
         </aside>
 
         <!-- SIDEBAR DE CANAIS -->
-        <aside id="channels-sidebar" class="w-60 h-full bg-zinc-950/60 border-r border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="h-14 border-b border-zinc-800 flex items-center gap-1 px-3 flex-shrink-0">
-                <h2 class="font-semibold text-sm text-zinc-200 truncate flex-1 px-1" id="server-name-label">Sala</h2>
-                <button id="btn-room-icon" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Trocar ícone da sala"><i class="ph ph-image text-sm"></i></button>
-                <button id="btn-rename-room" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-sm"></i></button>
-                <button id="btn-leave-room" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Sair da sala / trocar de servidor"><i class="ph ph-sign-out text-sm"></i></button>
+        <aside id="channels-sidebar" class="w-60 h-full bg-zinc-900 flex flex-col flex-shrink-0 hidden md:flex">
+            <div class="channel-topbar h-12 flex items-center gap-1 pl-4 pr-2 flex-shrink-0">
+                <h2 class="font-semibold text-[15px] text-zinc-100 truncate flex-1" id="server-name-label">Sala</h2>
+                <button id="btn-room-icon" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Trocar ícone da sala"><i class="ph ph-image text-lg"></i></button>
+                <button id="btn-rename-room" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Renomear sala"><i class="ph ph-pencil-simple text-lg"></i></button>
+                <button id="btn-leave-room" class="w-7 h-7 rounded flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors flex-shrink-0" title="Sair da sala / trocar de servidor"><i class="ph ph-sign-out text-lg"></i></button>
             </div>
-            <div class="flex-1 overflow-y-auto p-2 flex flex-col gap-4">
+            <div class="flex-1 overflow-y-auto px-2 pt-4 flex flex-col gap-4">
                 <div>
-                    <div class="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                        <i class="ph ph-caret-down text-[10px]"></i> Canais de Texto
-                    </div>
-                    <div id="text-channels-list" class="flex flex-col gap-0.5"></div>
+                    <div class="channel-category"><i class="ph ph-caret-down text-[10px]"></i> Canais de texto</div>
+                    <div id="text-channels-list" class="flex flex-col"></div>
                 </div>
                 <div>
-                    <div class="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                        <i class="ph ph-caret-down text-[10px]"></i> Canais de Voz
-                    </div>
-                    <div id="voice-channels-list" class="flex flex-col gap-0.5"></div>
+                    <div class="channel-category"><i class="ph ph-caret-down text-[10px]"></i> Canais de voz</div>
+                    <div id="voice-channels-list" class="flex flex-col"></div>
                 </div>
             </div>
-            <div id="voice-status-bar" class="hidden border-t border-emerald-500/30 p-3 items-center gap-2 bg-emerald-500/10 flex-shrink-0">
-                <span class="live-dot-green flex-shrink-0"></span>
-                <span class="text-xs text-zinc-300 flex-1 truncate" id="voice-status-label"></span>
-                <button id="btn-leave-voice-channel" class="text-zinc-400 hover:text-red-400 flex-shrink-0" title="Sair da sala de voz"><i class="ph ph-phone-disconnect"></i></button>
+            <!-- PAINEL "VOZ CONECTADA" (só aparece numa chamada) -->
+            <div id="voice-status-bar" class="hidden bg-[#232428] border-b border-zinc-800 px-2 py-2 items-center gap-1 flex-shrink-0">
+                <div class="flex-1 min-w-0 px-1">
+                    <div class="flex items-center gap-1.5 text-emerald-500 font-semibold text-sm"><i class="ph-fill ph-cell-signal-full"></i> Voz conectada</div>
+                    <div class="text-xs text-zinc-400 truncate" id="voice-status-label"></div>
+                </div>
+                <button id="btn-leave-voice-channel" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex-shrink-0" title="Desconectar"><i class="ph-fill ph-phone-disconnect text-xl"></i></button>
             </div>
-            <!-- BLOCO FIXO DO USUÁRIO: sempre visível, não só durante uma call -->
-            <div class="flex-shrink-0 border-t border-zinc-800 px-2.5 py-2.5 flex items-center gap-2 bg-zinc-900/60">
-                <div id="own-user-avatar-wrap" class="flex-shrink-0"></div>
-                <span id="own-user-name" class="flex-1 min-w-0 text-sm text-zinc-200 truncate">Você</span>
-                <button id="btn-own-name-edit" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 flex-shrink-0" title="Mudar meu nome" onclick="window.startEditOwnName(event)">
-                    <i class="ph ph-pencil-simple text-xs"></i>
+            <!-- PAINEL DO USUÁRIO: sempre visível, não só durante uma call -->
+            <div class="relative flex-shrink-0 h-[52px] px-2 flex items-center gap-0.5 bg-[#232428]">
+                <div class="flex items-center gap-2 flex-1 min-w-0 pl-0.5 pr-1 py-1 rounded hover:bg-zinc-800 transition-colors">
+                    <div id="own-user-avatar-wrap" class="flex-shrink-0"></div>
+                    <div class="min-w-0 leading-tight">
+                        <div id="own-user-name" class="text-sm font-semibold text-zinc-100 truncate">Você</div>
+                        <div class="text-xs text-zinc-400">Online</div>
+                    </div>
+                </div>
+                <button id="own-user-mic-icon" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Mutar/ativar seu microfone">
+                    <i class="ph ph-microphone text-xl"></i>
                 </button>
-                <button id="own-user-mic-icon" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:bg-zinc-800 flex-shrink-0" title="Mutar/ativar seu microfone">
-                    <i class="ph ph-microphone text-sm"></i>
+                <button id="btn-deafen" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Silenciar tudo que você ouve">
+                    <i class="ph ph-headphones text-xl"></i>
                 </button>
+                <button id="btn-user-settings" class="w-8 h-8 rounded flex items-center justify-center text-zinc-300 hover:bg-zinc-800 flex-shrink-0" title="Configurações">
+                    <i class="ph ph-gear-six text-xl"></i>
+                </button>
+                <div id="user-settings-menu" class="hidden absolute bottom-[56px] left-2 right-2 z-50 bg-[#111214] rounded-lg shadow-2xl p-1.5 flex-col">
+                    <button id="btn-own-name-edit" type="button" class="menu-item" onclick="window.startEditOwnName(event)"><i class="ph ph-pencil-simple"></i> Mudar meu nome</button>
+                    <button id="btn-audio-input" type="button" class="menu-item"><i class="ph ph-microphone"></i> Microfone</button>
+                    <button id="btn-audio-output" type="button" class="menu-item"><i class="ph ph-speaker-high"></i> Saída de áudio</button>
+                </div>
             </div>
         </aside>
 
         <!-- CONTEÚDO: CHAT DE TEXTO OU SALA DE VOZ -->
-        <div class="flex-1 h-full flex flex-col relative min-w-0">
-            <div id="text-chat-panel" class="hidden flex-1 flex-col min-h-0 p-4 md:p-6">
-                <div id="chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-3 pr-2"></div>
-                <div id="chat-image-preview" class="hidden items-center gap-2 mt-3 bg-zinc-900 border border-zinc-800 rounded-xl p-2 flex-shrink-0">
-                    <img id="chat-image-preview-img" class="w-14 h-14 rounded-lg object-cover flex-shrink-0" alt="">
-                    <span class="text-xs text-zinc-400 flex-1">Imagem pronta pra enviar</span>
-                    <button type="button" id="btn-chat-image-remove" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-zinc-800 flex-shrink-0" title="Remover imagem"><i class="ph ph-x text-sm"></i></button>
+        <div class="flex-1 h-full flex flex-col relative min-w-0 bg-[#313338]">
+            <div class="channel-topbar h-12 flex-shrink-0 px-4 flex items-center gap-3 z-10">
+                <button id="btn-toggle-channels" class="md:hidden w-6 h-6 text-zinc-300 hover:text-zinc-100 flex items-center justify-center flex-shrink-0" title="Mostrar/ocultar lista de canais"><i class="ph ph-list text-2xl"></i></button>
+                <div id="channel-header" class="flex items-center gap-2 text-zinc-100 text-base font-semibold min-w-0 flex-1"></div>
+                <div id="connection-status" class="flex items-center gap-1.5 text-xs text-zinc-400 flex-shrink-0">
+                    <div class="w-2 h-2 rounded-full bg-red-500" id="status-dot"></div>
+                    <span id="status-text">Desconectado</span>
                 </div>
-                <form id="chat-input-form" class="mt-3 flex items-center gap-2 flex-shrink-0">
-                    <button type="button" id="btn-chat-attach-image" class="w-11 h-11 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors" title="Anexar imagem"><i class="ph ph-image"></i></button>
-                    <input id="chat-input" type="text" maxlength="2000" autocomplete="off" class="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 transition-colors" placeholder="Mandar mensagem... (Ctrl+V pra colar print)">
-                    <button type="submit" class="w-11 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors" title="Enviar"><i class="ph ph-paper-plane-tilt"></i></button>
+                <button id="btn-toggle-participants" class="w-6 h-6 text-zinc-300 hover:text-zinc-100 flex items-center justify-center flex-shrink-0" title="Mostrar/ocultar lista de membros"><i class="ph-fill ph-users text-2xl"></i></button>
+            </div>
+
+            <div id="text-chat-panel" class="hidden flex-1 flex-col min-h-0">
+                <div id="chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-4 px-4 pt-4 pb-2"></div>
+                <div id="chat-image-preview" class="hidden items-center gap-2 mx-4 mb-1 bg-zinc-900 rounded-lg p-2 flex-shrink-0">
+                    <img id="chat-image-preview-img" class="w-14 h-14 rounded object-cover flex-shrink-0" alt="">
+                    <span class="text-xs text-zinc-400 flex-1">Imagem pronta pra enviar</span>
+                    <button type="button" id="btn-chat-image-remove" class="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-800 flex-shrink-0" title="Remover imagem"><i class="ph ph-x text-sm"></i></button>
+                </div>
+                <form id="chat-input-form" class="mx-4 mb-6 mt-1 flex items-center bg-[#383a40] rounded-lg flex-shrink-0">
+                    <button type="button" id="btn-chat-attach-image" class="w-14 h-11 flex items-center justify-center text-zinc-300 hover:text-zinc-100 flex-shrink-0" title="Anexar imagem"><i class="ph-fill ph-plus-circle text-2xl"></i></button>
+                    <input id="chat-input" type="text" maxlength="2000" autocomplete="off" class="flex-1 min-w-0 bg-transparent py-2.5 pr-4 text-base text-zinc-200 placeholder-zinc-500 focus:outline-none" placeholder="Conversar... (Ctrl+V pra colar print)">
+                    <button type="submit" class="hidden" title="Enviar"></button>
                 </form>
             </div>
             <input type="file" id="chat-image-file-input" accept="image/*" class="hidden">
@@ -388,76 +400,40 @@
                 <img id="image-lightbox-img" class="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" alt="">
             </div>
 
-            <div id="voice-panel-wrapper" class="flex-1 flex-col p-4 md:p-6 min-h-0" style="display:none;">
-                <div id="voice-member-strip" class="flex flex-wrap gap-2 mb-4 flex-shrink-0"></div>
-                <div class="video-stage flex-1 min-h-0" id="main-video-wrapper">
+            <div id="voice-panel-wrapper" class="flex-1 flex-col min-h-0 bg-black" style="display:none;">
+                <div id="voice-member-strip" class="flex flex-wrap gap-2 px-4 pt-4 flex-shrink-0"></div>
+                <div class="video-stage flex-1 min-h-0 p-4" id="main-video-wrapper">
                     <div class="video-status" id="empty-state"></div>
                     <div class="video-grid" id="video-grid"></div>
+                </div>
+
+                <!-- CONTROLES DA CHAMADA (dentro da própria chamada, como no Discord) -->
+                <div class="flex-shrink-0 flex items-center justify-center gap-3 pb-6 pt-2">
+                    <div class="flex items-center bg-zinc-900 rounded-full pr-4 h-14">
+                        <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)">
+                            <i class="ph ph-speaker-simple-slash text-xl"></i>
+                        </button>
+                        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)" style="width: 80px;">
+                    </div>
+                    <button class="control-btn disabled-btn" id="btn-mic" title="Entre em uma sala de voz para usar o microfone"><i class="ph ph-microphone text-2xl"></i></button>
+                    <button class="control-btn disabled-btn" id="btn-share" title="Compartilhar sua tela"><i class="ph ph-screencast text-2xl"></i></button>
+                    <button class="control-btn" id="btn-quality" title="Qualidade de Vídeo"><i class="ph ph-gear-six text-2xl"></i></button>
+                    <button class="control-btn" id="btn-fullscreen" title="Tela Cheia"><i class="ph ph-arrows-out text-2xl"></i></button>
+                    <button class="control-btn leave-btn disabled-btn" id="btn-leave" title="Desconectar"><i class="ph-fill ph-phone-disconnect text-2xl"></i></button>
                 </div>
             </div>
         </div>
 
-        <!-- PAINEL DE PARTICIPANTES (todo mundo na sala, não só quem tá em canal de voz) -->
-        <aside id="participants-panel" class="w-60 h-full bg-zinc-950/60 border-l border-zinc-800 flex flex-col flex-shrink-0 hidden md:flex">
-            <div class="h-14 border-b border-zinc-800 flex items-center gap-1 px-3 flex-shrink-0">
-                <h2 class="font-semibold text-sm text-zinc-200 flex-1 px-1">Participantes</h2>
-                <span id="participants-count" class="text-xs text-zinc-500 flex-shrink-0 mr-1"></span>
-                <button id="btn-close-participants" class="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors flex-shrink-0" title="Ocultar participantes"><i class="ph ph-x text-sm"></i></button>
+        <!-- LISTA DE MEMBROS (todo mundo na sala, não só quem tá em canal de voz) -->
+        <aside id="participants-panel" class="w-60 h-full bg-zinc-900 flex flex-col flex-shrink-0 hidden md:flex">
+            <div class="flex items-center px-4 pt-6 pb-1 flex-shrink-0">
+                <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-[0.02em] flex-1">Online — <span id="participants-count"></span></h2>
+                <button id="btn-close-participants" class="w-5 h-5 rounded flex items-center justify-center text-zinc-400 hover:text-zinc-100 flex-shrink-0" title="Ocultar membros"><i class="ph ph-x text-sm"></i></button>
             </div>
-            <div id="participants-list" class="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5"></div>
+            <div id="participants-list" class="flex-1 overflow-y-auto px-2 flex flex-col"></div>
         </aside>
 
     </main>
-
-    <!-- FOOTER: prioridade visual -- mic/tela/sair (principais, maiores) vs utilitários (secundários, menores) -->
-    <footer class="flex-shrink-0 h-24 border-t border-zinc-800 bg-zinc-950 flex items-center justify-center gap-6 px-6 z-20 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-
-        <!-- grupo 1: controles principais da chamada (maior peso visual) -->
-        <div class="flex items-center gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl px-3 py-2">
-            <button class="control-btn disabled-btn" id="btn-mic" title="Entre em uma sala de voz para usar o microfone" style="width: 52px; height: 52px; font-size: 22px;">
-                <i class="ph ph-microphone text-2xl"></i>
-            </button>
-
-            <button class="control-btn disabled-btn bg-blue-600 border-blue-500 hover:bg-blue-500 text-white" id="btn-share" title="Entre em uma sala de voz para compartilhar sua tela" style="width: 52px; height: 52px; font-size: 22px;"><i class="ph ph-screencast text-2xl"></i></button>
-        </div>
-
-        <!-- grupo 2: utilitários do app -- secundários (menores, mais discretos) -->
-        <div class="flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/70 rounded-2xl px-2.5 py-1.5">
-            <div class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full pl-1 pr-3 py-1">
-                <button class="control-btn" id="btn-volume" title="Mutar/Ativar tudo que você ouve (tela + voz dos outros)" style="width: 34px; height: 34px; font-size: 15px; background-color: #2b2724; border-color: #453f38;">
-                    <i class="ph ph-speaker-simple-slash text-base"></i>
-                </button>
-                <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="100" title="Volume geral (transmissões e chat de voz)" style="width: 56px;">
-            </div>
-
-            <button class="control-btn text-zinc-400" id="btn-quality" title="Qualidade de Vídeo" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-gear-six text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-fullscreen" title="Tela Cheia" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-arrows-out text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-toggle-channels" title="Mostrar/ocultar lista de canais" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-list text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-audio-output" title="Escolher dispositivo de saída do chat de voz" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-waveform text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-audio-input" title="Escolher microfone" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-microphone text-base"></i>
-            </button>
-
-            <button class="control-btn text-zinc-400" id="btn-toggle-participants" title="Mostrar/ocultar participantes" style="width: 34px; height: 34px; font-size: 15px; background-color: #1c1917;">
-                <i class="ph ph-users-three text-base"></i>
-            </button>
-        </div>
-
-        <!-- grupo 3: sair da call (maior peso visual, cor destrutiva) -->
-        <button class="control-btn danger-state disabled-btn w-14 h-14 rounded-2xl" id="btn-leave" title="Sair do canal de voz"><i class="ph ph-phone-disconnect text-2xl"></i></button>
-    </footer>
 
     <div id="toast" class="toast"><i id="toast-icon" class="ph-fill ph-info text-2xl text-blue-500"></i><div><h4 id="toast-title" class="font-semibold text-sm">Notificação</h4><p id="toast-msg" class="text-xs text-zinc-400">Mensagem.</p></div></div>
 
@@ -1397,9 +1373,9 @@
                 }
                 const ownMicIcon = document.getElementById('own-user-mic-icon');
                 if (ownMicIcon) {
-                    ownMicIcon.innerHTML = isMicMuted ? '<i class="ph ph-microphone-slash text-sm"></i>' : '<i class="ph ph-microphone text-sm"></i>';
+                    ownMicIcon.innerHTML = isMicMuted ? '<i class="ph ph-microphone-slash text-xl"></i>' : '<i class="ph ph-microphone text-xl"></i>';
                     ownMicIcon.classList.toggle('text-red-400', isMicMuted);
-                    ownMicIcon.classList.toggle('text-zinc-400', !isMicMuted);
+                    ownMicIcon.classList.toggle('text-zinc-300', !isMicMuted);
                 }
             }
 
@@ -1807,7 +1783,7 @@
                 if (myVoiceChannel) {
                     statusBar.classList.remove('hidden');
                     statusBar.classList.add('flex');
-                    statusLabel.textContent = `Conectado: ${myVoiceChannel}`;
+                    statusLabel.textContent = `${myVoiceChannel} / ${currentRoom || ''}`;
                 } else {
                     statusBar.classList.add('hidden');
                     statusBar.classList.remove('flex');
@@ -1826,6 +1802,7 @@
                     textChatPanel.classList.remove('hidden');
                     textChatPanel.classList.add('flex');
                     voicePanelWrapper.style.display = 'none';
+                    document.getElementById('chat-input').placeholder = `Conversar em #${viewingChannel || ''}`;
                     // Canal de texto: neutro, ícone de #. Sem cor de "ao vivo" --
                     // precisa ficar visualmente diferente de um canal de voz.
                     channelHeaderEl.innerHTML = `<i class="ph ph-hash text-zinc-500"></i> <span>${escapeHtml(viewingChannel || '')}</span>`;
@@ -2065,7 +2042,7 @@
                 document.getElementById('toast-title').textContent = title;
                 document.getElementById('toast-msg').textContent = message;
                 document.getElementById('toast-icon').className = type === 'error' ? 'ph-fill ph-warning-circle text-2xl text-red-500' : 'ph-fill ph-info text-2xl text-blue-500';
-                toast.style.borderLeftColor = type === 'error' ? '#ef4444' : '#3b82f6';
+                toast.style.borderLeftColor = type === 'error' ? '#da373c' : '#5865f2';
                 toast.classList.add('show');
                 clearTimeout(toastTimeout);
                 toastTimeout = setTimeout(() => toast.classList.remove('show'), 4000);
@@ -2183,13 +2160,20 @@
             }
 
             function updateVolumeIcon() {
-                if (isMuted || masterVolume === 0) {
+                const deafened = isMuted || masterVolume === 0;
+                if (deafened) {
                     btnVolume.innerHTML = '<i class="ph ph-speaker-simple-slash text-xl"></i>';
                     btnVolume.classList.remove('volume-active');
                 } else {
                     const icon = masterVolume < 0.5 ? 'ph-speaker-low' : 'ph-speaker-high';
                     btnVolume.innerHTML = `<i class="ph ${icon} text-xl"></i>`;
                     btnVolume.classList.add('volume-active');
+                }
+                // Fone no painel do usuário (o "ensurdecer" do Discord) espelha o mesmo estado
+                const btnDeafen = document.getElementById('btn-deafen');
+                if (btnDeafen) {
+                    btnDeafen.classList.toggle('text-red-400', deafened);
+                    btnDeafen.classList.toggle('text-zinc-300', !deafened);
                 }
             }
             updateVolumeIcon(); // sincroniza o ícone com o estado inicial (desmutado)
@@ -2207,6 +2191,24 @@
                 updateVolumeIcon();
                 applyAudioToAllTiles();
                 showToast('Áudio', isMuted ? 'Áudio das transmissões silenciado.' : 'Áudio das transmissões ativado.');
+            });
+
+            document.getElementById('btn-deafen').addEventListener('click', () => btnVolume.click());
+
+            // Engrenagem do painel do usuário: menu com nome, microfone e saída de áudio
+            const userSettingsMenu = document.getElementById('user-settings-menu');
+            function setUserSettingsMenuOpen(open) {
+                userSettingsMenu.classList.toggle('hidden', !open);
+                userSettingsMenu.classList.toggle('flex', open);
+            }
+            document.getElementById('btn-user-settings').addEventListener('click', (e) => {
+                e.stopPropagation();
+                setUserSettingsMenuOpen(userSettingsMenu.classList.contains('hidden'));
+            });
+            // capture: fecha antes do clique chegar no item (o "Mudar meu nome" para a propagação)
+            userSettingsMenu.addEventListener('click', () => setUserSettingsMenuOpen(false), true);
+            document.addEventListener('click', (e) => {
+                if (!userSettingsMenu.contains(e.target)) setUserSettingsMenuOpen(false);
             });
 
             volumeSlider.addEventListener('input', () => {
@@ -2259,26 +2261,31 @@
 
             function renderParticipantsPanel() {
                 const users = window._users || [];
-                document.getElementById('participants-count').textContent = users.length + ' online';
+                document.getElementById('participants-count').textContent = users.length;
                 const list = document.getElementById('participants-list');
                 list.innerHTML = '';
                 users.forEach(u => {
                     const isSelf = u.id === socket.id;
                     const row = document.createElement('div');
-                    row.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors';
+                    row.className = 'group flex items-center gap-3 px-2 py-1.5 my-px rounded hover:bg-zinc-800 transition-colors';
+                    // Coroa pro dono e escudo pro admin, do lado do nome (como no Discord)
                     const roleBadge = u.isOwner
-                        ? '<span class="text-[9px] font-bold text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded px-1 flex-shrink-0">DONO</span>'
+                        ? '<i class="ph-fill ph-crown text-amber-400 text-sm flex-shrink-0" title="Dono da sala"></i>'
                         : u.isAdmin
-                            ? '<span class="text-[9px] font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 flex-shrink-0">ADMIN</span>'
+                            ? '<i class="ph-fill ph-shield-star text-blue-400 text-sm flex-shrink-0" title="Administrador"></i>'
                             : '';
                     const voiceBadge = u.voiceChannel
-                        ? `<span class="text-[10px] text-emerald-400 flex items-center gap-0.5 flex-shrink-0"><i class="ph-fill ph-speaker-high"></i> ${escapeHtml(u.voiceChannel)}</span>`
+                        ? `<div class="text-xs text-zinc-400 truncate flex items-center gap-1"><i class="ph-fill ph-speaker-high text-emerald-500"></i> ${escapeHtml(u.voiceChannel)}</div>`
                         : '';
                     row.innerHTML = `
-                        ${avatarHtml(u, 'w-7 h-7', isSelf)}
-                        <span class="truncate flex-1 text-sm text-zinc-200">${escapeHtml(u.name)}${isSelf ? ' (Você)' : ''}</span>
-                        ${roleBadge}
-                        ${voiceBadge}
+                        ${avatarHtml(u, 'w-8 h-8', isSelf)}
+                        <div class="min-w-0 flex-1 leading-tight">
+                            <div class="flex items-center gap-1 min-w-0">
+                                <span class="truncate text-base font-medium text-zinc-400 group-hover:text-zinc-200">${escapeHtml(u.name)}</span>
+                                ${roleBadge}
+                            </div>
+                            ${voiceBadge}
+                        </div>
                     `;
                     if (!isSelf) {
                         row.title = 'Clique com o botão direito para ajustar volume ou expulsar';
@@ -2392,10 +2399,10 @@
                     const isCurrent = name === currentRoom;
                     const isOnline = !!meta;
                     const wrap = document.createElement('div');
-                    wrap.className = 'relative flex items-center justify-center group';
+                    wrap.className = 'relative w-full flex items-center justify-center group';
                     const btn = document.createElement('button');
-                    btn.className = 'w-11 h-11 flex-shrink-0 flex items-center justify-center transition-all duration-150 overflow-hidden ' +
-                        (isCurrent ? 'rounded-2xl bg-blue-600 text-white' : 'rounded-3xl bg-zinc-800 text-zinc-300 hover:rounded-2xl hover:bg-zinc-700');
+                    btn.className = 'w-12 h-12 flex-shrink-0 flex items-center justify-center transition-all duration-150 overflow-hidden ' +
+                        (isCurrent ? 'rounded-[16px] bg-blue-600 text-white' : 'rounded-[24px] bg-[#313338] text-zinc-200 hover:rounded-[16px] hover:bg-blue-600 hover:text-white');
                     btn.style.opacity = isOnline || isCurrent ? '1' : '0.5';
                     btn.innerHTML = meta?.icon
                         ? `<img src="${escapeHtml(meta.icon)}" class="w-full h-full object-cover">`
@@ -2408,11 +2415,12 @@
                         openServerRailContextMenu(name, isCurrent, e.clientX, e.clientY);
                     });
                     wrap.appendChild(btn);
-                    if (isCurrent) {
-                        const bar = document.createElement('div');
-                        bar.className = 'absolute -left-2.5 w-1 h-7 bg-white rounded-r-full';
-                        wrap.appendChild(bar);
-                    }
+                    // "Pílula" branca na borda esquerda, igual ao Discord: alta na
+                    // sala atual, pequena no hover das outras.
+                    const bar = document.createElement('div');
+                    bar.className = 'absolute left-0 w-1 bg-white rounded-r-full transition-all duration-150 ' +
+                        (isCurrent ? 'h-10' : 'h-0 group-hover:h-5');
+                    wrap.appendChild(bar);
                     railList.appendChild(wrap);
                 });
             }
@@ -3262,8 +3270,7 @@
                 updateQualityInfoUI();
                 addSelfPreviewTile();
                 btnShare.classList.add('active-state');
-                btnShare.classList.remove('bg-blue-600', 'border-blue-500');
-                btnShare.innerHTML = '<i class="ph ph-stop text-3xl"></i>';
+                btnShare.innerHTML = '<i class="ph ph-stop text-2xl"></i>';
                 showToast('Compartilhando', settingsLabel);
 
                 // Compartilhando áudio do sistema: o que você ouve tocaria de volta pro
@@ -3396,8 +3403,7 @@
                 updateQualityInfoUI();
                 removeSelfPreviewTile();
                 btnShare.classList.remove('active-state');
-                btnShare.classList.add('bg-blue-600', 'border-blue-500');
-                btnShare.innerHTML = '<i class="ph ph-screencast text-3xl"></i>';
+                btnShare.innerHTML = '<i class="ph ph-screencast text-2xl"></i>';
                 showToast('Encerrado', 'Compartilhamento parado.');
             }
 
