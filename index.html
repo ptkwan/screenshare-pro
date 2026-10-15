@@ -137,6 +137,8 @@
         .chat-message .cm-name { font-weight: 500; font-size: 16px; color: #f2f3f5; }
         .chat-message .cm-time { font-size: 12px; color: #949ba4; }
         .chat-message .cm-text { font-size: 16px; line-height: 1.375; color: #dbdee1; white-space: pre-wrap; word-break: break-word; }
+        .cm-bot-avatar { width: 40px; height: 40px; border-radius: 9999px; background: #5865f2; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .cm-bot-tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; line-height: 15px; padding: 0 4px; border-radius: 3px; margin: 0 6px 0 4px; align-self: center; }
         .chat-message .cm-image { max-width: 320px; max-height: 320px; margin-top: 4px; border-radius: 8px; border: 1px solid #35373c; cursor: zoom-in; display: block; object-fit: contain; background: #1e1f22; transition: border-color 0.15s ease; }
         .chat-message .cm-image:hover { border-color: #4e5058; }
 
@@ -1371,8 +1373,8 @@
                 if (!window.RnnoiseWorkletNode || !window.loadRnnoise) {
                     // Vendor não carregou por algum motivo -- não trava o chat de voz
                     // por causa disso, só segue sem a segunda passada de supressão.
-                    outgoingVoiceStream = raw;
-                    return raw;
+                    outgoingVoiceStream = buildPlainOutgoing(raw);
+                    return outgoingVoiceStream;
                 }
 
                 try {
@@ -1402,6 +1404,7 @@
                     const rnnoise = new window.RnnoiseWorkletNode(denoiseCtx, { maxChannels: 1, wasmBinary });
                     const dest = denoiseCtx.createMediaStreamDestination();
                     source.connect(rumbleFilter).connect(rnnoise).connect(dest);
+                    connectMusicBus(denoiseCtx, dest);
 
                     outgoingVoiceStream = dest.stream;
                     console.log('[rnnoise] supressão de ruído ativa no microfone');
@@ -1412,7 +1415,24 @@
                     // cai pro stream cru, só sem a segunda passada de supressão.
                     console.error('[rnnoise] falha ao iniciar supressão de ruído:', err);
                     reportLog('error', `Falha ao iniciar supressão de ruído: ${err.message || err}`);
-                    outgoingVoiceStream = raw;
+                    outgoingVoiceStream = buildPlainOutgoing(raw);
+                    return outgoingVoiceStream;
+                }
+            }
+
+            // Sem RNNoise: ainda passa o microfone por um AudioContext (sem filtro
+            // nenhum) só pra ter onde misturar a música do bot. Se nem isso der,
+            // manda o microfone cru, como sempre foi.
+            function buildPlainOutgoing(raw) {
+                try {
+                    if (denoiseCtx) { try { denoiseCtx.close(); } catch (e) { /* ignora */ } }
+                    denoiseCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                    const dest = denoiseCtx.createMediaStreamDestination();
+                    denoiseCtx.createMediaStreamSource(raw).connect(dest);
+                    connectMusicBus(denoiseCtx, dest);
+                    return dest.stream;
+                } catch (e) {
+                    denoiseCtx = null;
                     return raw;
                 }
             }
@@ -1899,6 +1919,7 @@
                 if (!myVoiceChannel) return;
                 playLeaveTone(); // toque também pra mim mesmo, na hora que eu saio
                 if (isSharing) stopScreenShare();
+                musicStopAll();
 
                 closeAllVoicePeers();
 
@@ -2182,13 +2203,16 @@
                 if (groupStart) {
                     // Por id da conexão ou, se a pessoa reconectou (id novo), pelo nome
                     // -- nomes são únicos no servidor
-                    const author = findUser(msg.userId) || (window._users || []).find(u => u.name === msg.userName) || null;
+                    const author = msg.bot ? null : findUser(msg.userId) || (window._users || []).find(u => u.name === msg.userName) || null;
                     const color = author ? roleColor(author) : null;
                     div.className = 'chat-message cm-group-start';
+                    const gutter = msg.bot
+                        ? '<div class="cm-bot-avatar"><i class="ph-fill ph-music-notes"></i></div>'
+                        : avatarHtml(author || { id: msg.userId, name: msg.userName }, 'w-10 h-10', false);
                     div.innerHTML = `
-                        <div class="cm-gutter cursor-pointer cm-author">${avatarHtml(author || { id: msg.userId, name: msg.userName }, 'w-10 h-10', false)}</div>
+                        <div class="cm-gutter cursor-pointer cm-author">${gutter}</div>
                         <div class="min-w-0">
-                            <div class="cm-header"><span class="cm-name cm-author" style="${color ? `color:${color}` : ''}">${escapeHtml(msg.userName)}</span><span class="cm-time">${formatDiscordTimestamp(msg.ts)}</span></div>
+                            <div class="cm-header"><span class="cm-name cm-author" style="${color ? `color:${color}` : ''}">${escapeHtml(msg.userName)}</span>${msg.bot ? '<span class="cm-bot-tag">BOT</span>' : ''}<span class="cm-time">${formatDiscordTimestamp(msg.ts)}</span></div>
                             ${msg.text ? '<div class="cm-text"></div>' : ''}
                             ${imageHtml}
                         </div>
@@ -2462,6 +2486,7 @@
                     v.volume = masterVolume;
                 });
                 Object.keys(gainNodes).forEach(peerId => applyGainForUser(peerId));
+                applyMusicVolume();
             }
 
             function updateVolumeIcon() {
@@ -3344,6 +3369,7 @@
                 updateOwnUserBlock();
                 renderServerRail();
                 if (isSharing) stopScreenShare();
+                musicStopAll();
                 Object.values(viewerPeers).forEach(pc => pc.close());
                 Object.values(senderPeers).forEach(pc => pc.close());
                 Object.keys(viewerPeers).forEach(k => delete viewerPeers[k]);
@@ -3376,7 +3402,7 @@
                     return;
                 }
                 const ownerToken = localStorage.getItem('ssp-owner-token-Quartonha') || null;
-                socket.emit('join-room', { username: myUsername, avatar: myAvatar, ownerToken, userToken: getUserToken() });
+                socket.emit('join-room', { username: myUsername, avatar: myAvatar, ownerToken, userToken: getUserToken(), features: ['music-bot'] });
             }
 
             function showConnectForm() {
@@ -3834,6 +3860,212 @@
                 btnShare.innerHTML = '<i class="ph ph-screencast text-2xl"></i>';
                 showToast('Encerrado', 'Compartilhamento parado.');
             }
+
+            // ==========================================
+            // BOT DE MÚSICA ("DJ Quartonha") -- lado de quem está tocando
+            // ==========================================
+            // Quem dá o primeiro !play estando em chamada vira o DJ: o servidor
+            // repassa pra cá os comandos do chat de todo mundo ('music-command'),
+            // o áudio é baixado pelo yt-dlp no processo principal (music-bot.js) e
+            // toca num AudioContext próprio. De lá vai pra dois lugares: pros seus
+            // fones (respeitando o mudo/volume geral e o dispositivo de saída) e pro
+            // "music bus" -- misturado no áudio que você já manda pra chamada,
+            // DEPOIS do RNNoise (que estragaria a música) e fora do mudo do
+            // microfone (mutar o mic não corta a música pros outros).
+            const MUSIC_MAX_QUEUE = 25;
+            const MUSIC_SEND_LEVEL = 0.7; // no volume 100; no padrão (50) a música fica bem abaixo da voz
+            const music = {
+                ctx: null, out: null, localGain: null, // AudioContext da música, saída pra chamada, saída pros fones
+                sendBus: null, sendSource: null,       // entrada da música no grafo do microfone
+                audioEl: null, elSource: null, current: null, queue: [],
+                volume: 50, resolving: 0, gen: 0, preparingAnnounced: false,
+            };
+
+            function ensureMusicCtx() {
+                if (music.ctx) return music.ctx;
+                const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                music.ctx = ctx;
+                music.out = ctx.createMediaStreamDestination();
+                music.localGain = ctx.createGain();
+                music.localGain.connect(ctx.destination);
+                if (outputDeviceId !== 'default' && typeof ctx.setSinkId === 'function') ctx.setSinkId(outputDeviceId).catch(() => {});
+                applyMusicVolume();
+                attachMusicToSendBus();
+                return ctx;
+            }
+
+            // Chamado toda vez que o grafo de saída do microfone é (re)montado
+            // (entrar na chamada, trocar de microfone)
+            function connectMusicBus(ctx, dest) {
+                music.sendBus = ctx.createGain();
+                music.sendBus.connect(dest);
+                music.sendSource = null;
+                applyMusicVolume();
+                attachMusicToSendBus();
+            }
+            function attachMusicToSendBus() {
+                if (!music.sendBus || !music.out || music.sendSource) return;
+                try {
+                    music.sendSource = music.sendBus.context.createMediaStreamSource(music.out.stream);
+                    music.sendSource.connect(music.sendBus);
+                } catch (e) { music.sendSource = null; }
+            }
+            function applyMusicVolume() {
+                const level = music.volume / 100;
+                if (music.sendBus) music.sendBus.gain.value = level * MUSIC_SEND_LEVEL;
+                if (music.localGain) music.localGain.gain.value = isMuted ? 0 : level * masterVolume;
+            }
+
+            function musicSay(text) {
+                if (socket.connected) socket.emit('music-bot-say', { text });
+            }
+            function formatDuration(seconds) {
+                const s = Math.max(0, Math.round(seconds || 0));
+                const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, '0');
+                return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+            }
+
+            function musicStopCurrent() {
+                const el = music.audioEl;
+                music.audioEl = null;
+                music.current = null;
+                if (music.elSource) { try { music.elSource.disconnect(); } catch (e) { /* ignora */ } music.elSource = null; }
+                if (el) {
+                    el.pause();
+                    URL.revokeObjectURL(el.src);
+                    el.removeAttribute('src');
+                }
+            }
+            // Para tudo SÓ aqui (sair da chamada/da sala) -- o servidor já sabe e avisa no chat
+            function musicStopAll() {
+                music.gen++;
+                music.queue = [];
+                musicStopCurrent();
+            }
+            // Para tudo e avisa o servidor que não sou mais o DJ
+            function musicRelease() {
+                musicStopAll();
+                if (socket.connected) socket.emit('music-release');
+            }
+
+            async function musicPlayNext() {
+                musicStopCurrent();
+                const next = music.queue.shift();
+                if (!next) {
+                    // Ainda tem música sendo baixada: ela começa sozinha quando chegar
+                    if (music.resolving > 0) return;
+                    musicSay('📭 A fila acabou.');
+                    musicRelease();
+                    return;
+                }
+                const ctx = ensureMusicCtx();
+                if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+                const el = new Audio();
+                el.src = URL.createObjectURL(new Blob([next.data], { type: next.mime }));
+                next.data = null; // o Blob já guarda os bytes
+                music.elSource = ctx.createMediaElementSource(el);
+                music.elSource.connect(music.out);
+                music.elSource.connect(music.localGain);
+                music.audioEl = el;
+                music.current = next;
+                el.onended = () => { if (music.audioEl === el) musicPlayNext(); };
+                el.onerror = () => {
+                    if (music.audioEl !== el) return;
+                    reportLog('warn', `[musica] erro ao tocar "${next.title}": ${el.error?.code}`);
+                    musicSay(`⚠️ Não consegui tocar "${next.title}", pulando.`);
+                    musicPlayNext();
+                };
+                try {
+                    await el.play();
+                    musicSay(`▶️ Tocando agora: ${next.title} [${formatDuration(next.duration)}] -- pedido por ${next.by}`);
+                } catch (e) {
+                    if (music.audioEl === el) el.onerror();
+                }
+            }
+
+            const MUSIC_ERRORS = {
+                'not-found': 'não achei nada no YouTube',
+                'too-long': 'é ao vivo ou passa de 1 hora',
+                failed: 'o YouTube não deixou baixar agora (tenta de novo daqui a pouco)',
+            };
+            async function musicEnqueue(query, by) {
+                if (!myVoiceChannel) {
+                    musicSay('Não estou mais numa chamada -- quem quiser música, dá !play de novo estando num canal de voz.');
+                    musicRelease();
+                    return;
+                }
+                if (!window.electronAPI?.musicResolve) return musicSay('Esse app não consegue tocar música.');
+                if (music.queue.length + music.resolving >= MUSIC_MAX_QUEUE) return musicSay(`A fila está cheia (${MUSIC_MAX_QUEUE} músicas).`);
+                const gen = music.gen;
+                music.resolving++;
+                let result;
+                try {
+                    if (await window.electronAPI.musicIsReady()) musicSay(`🔎 Procurando "${query}"...`);
+                    else if (!music.preparingAnnounced) {
+                        music.preparingAnnounced = true;
+                        musicSay('⏳ Preparando o bot pela primeira vez (baixando o yt-dlp, ~17 MB)...');
+                    }
+                    result = await window.electronAPI.musicResolve(query);
+                } catch (e) {
+                    result = { ok: false, reason: 'failed', detail: String(e.message || e) };
+                } finally {
+                    music.resolving--;
+                }
+                if (gen !== music.gen) return; // deram !stop (ou saí da chamada) enquanto baixava
+                if (!result.ok) {
+                    reportLog('warn', `[musica] falha ao buscar "${query}": ${result.reason} ${result.detail || ''}`);
+                    musicSay(`❌ "${query}": ${MUSIC_ERRORS[result.reason] || MUSIC_ERRORS.failed}.`);
+                    if (!music.current && !music.queue.length && !music.resolving) musicRelease();
+                    return;
+                }
+                const item = { title: result.title, duration: result.duration, data: result.data, mime: result.mime, by };
+                music.queue.push(item);
+                if (!music.current) musicPlayNext();
+                else musicSay(`➕ Na fila (#${music.queue.length}): ${item.title} [${formatDuration(item.duration)}] -- pedido por ${by}`);
+            }
+
+            socket.on('music-command', ({ cmd, args, by } = {}) => {
+                const el = music.audioEl;
+                switch (cmd) {
+                    case 'play': case 'p': case 'tocar':
+                        if (!args) return musicSay('Use: !play <nome da música ou link do YouTube>');
+                        return musicEnqueue(args, by);
+                    case 'skip': case 's': case 'pular':
+                        if (!music.current) return musicSay('Não tem nada tocando agora.');
+                        musicSay(`⏭️ ${by} pulou "${music.current.title}".`);
+                        return musicPlayNext();
+                    case 'stop': case 'parar':
+                        musicSay(`⏹️ ${by} parou a música e limpou a fila.`);
+                        return musicRelease();
+                    case 'pause': case 'pausar':
+                        if (!el || el.paused) return musicSay('Não tem nada tocando agora.');
+                        el.pause();
+                        return musicSay(`⏸️ Pausado por ${by}. Use !resume pra continuar.`);
+                    case 'resume': case 'continuar':
+                        if (!el || !el.paused) return musicSay('Não tem nada pausado.');
+                        el.play().catch(() => {});
+                        return musicSay(`▶️ Continuando: ${music.current.title}`);
+                    case 'np': case 'tocando':
+                        if (!music.current) return musicSay('Não tem nada tocando agora.');
+                        return musicSay(`🎶 Tocando: ${music.current.title} [${formatDuration(el?.currentTime)} / ${formatDuration(music.current.duration)}] -- pedido por ${music.current.by}`);
+                    case 'queue': case 'q': case 'fila': {
+                        if (!music.current && !music.queue.length) return musicSay(music.resolving ? '🔎 Baixando a próxima música...' : 'A fila está vazia.');
+                        const lines = [];
+                        if (music.current) lines.push(`🎶 Agora: ${music.current.title} [${formatDuration(music.current.duration)}] -- ${music.current.by}`);
+                        music.queue.slice(0, 10).forEach((m, i) => lines.push(`${i + 1}. ${m.title} [${formatDuration(m.duration)}] -- ${m.by}`));
+                        if (music.queue.length > 10) lines.push(`... e mais ${music.queue.length - 10}`);
+                        if (music.resolving) lines.push(`(+${music.resolving} sendo baixada${music.resolving > 1 ? 's' : ''})`);
+                        return musicSay(lines.join('\n'));
+                    }
+                    case 'volume': case 'vol': {
+                        const v = parseInt(args, 10);
+                        if (!Number.isFinite(v) || v < 0 || v > 100) return musicSay(`🔊 Volume: ${music.volume}. Use !volume <0-100>.`);
+                        music.volume = v;
+                        applyMusicVolume();
+                        return musicSay(`🔊 Volume da música: ${v} (por ${by})`);
+                    }
+                }
+            });
 
             document.getElementById('btn-leave').addEventListener('click', () => {
                 if (!myVoiceChannel) return;

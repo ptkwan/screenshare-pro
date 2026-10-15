@@ -372,7 +372,85 @@ function completeJoin(socket, roomId) {
 }
 
 // Tira um socket da sala -- usado quando a conexão cai de vez (disconnect).
+// ==========================================
+// BOT DE MÚSICA ("DJ Quartonha")
+// ==========================================
+// Grátis, sem servidor de áudio: quem dá o primeiro !play estando em chamada
+// vira o "DJ" -- o app DELE baixa a música (yt-dlp) e mistura no áudio que já
+// manda pra chamada. O servidor só repassa os comandos do chat pro DJ e posta
+// as respostas do bot. Se o DJ sair da chamada (ou cair), a música para.
+const MUSIC_BOT_ID = 'music-bot';
+const MUSIC_BOT_NAME = 'DJ Quartonha';
+const MUSIC_COMMANDS = new Set([
+  'play', 'p', 'tocar', 'skip', 's', 'pular', 'stop', 'parar', 'pause', 'pausar',
+  'resume', 'continuar', 'queue', 'q', 'fila', 'volume', 'vol', 'np', 'tocando',
+  'help', 'ajuda',
+]);
+const MUSIC_HELP = [
+  '🎵 Comandos do DJ (digite em qualquer canal de texto):',
+  '!play <nome ou link do YouTube> -- toca ou põe na fila (precisa estar numa chamada)',
+  '!skip -- pula a música | !pause / !resume -- pausa / continua',
+  '!fila -- mostra a fila | !tocando -- o que está tocando',
+  '!volume <0-100> -- volume da música | !stop -- para tudo e limpa a fila',
+].join('\n');
+const roomMusicHosts = new Map(); // roomId -> { socketId, textChannel }
+
+function postBotMessage(room, channel, text) {
+  const list = roomMessages.get(room)?.get(channel);
+  if (!list) return;
+  const msg = {
+    id: `${MUSIC_BOT_ID}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    userId: MUSIC_BOT_ID,
+    userName: MUSIC_BOT_NAME,
+    bot: true,
+    text: String(text).slice(0, 2000),
+    image: null,
+    ts: Date.now()
+  };
+  list.push(msg);
+  if (list.length > MAX_MESSAGES_PER_CHANNEL) list.shift();
+  markRoomDirty(room);
+  io.to(room).emit('chat-message', { channel, message: msg });
+}
+
+function handleMusicCommand(socket, room, channel, text) {
+  const [first, ...rest] = text.slice(1).split(/\s+/);
+  const cmd = (first || '').toLowerCase();
+  if (!MUSIC_COMMANDS.has(cmd)) return;
+  const args = rest.join(' ').trim().slice(0, 300);
+
+  if (cmd === 'help' || cmd === 'ajuda') return postBotMessage(room, channel, MUSIC_HELP);
+
+  let host = roomMusicHosts.get(room);
+  if (host && !io.sockets.sockets.get(host.socketId)) {
+    roomMusicHosts.delete(room);
+    host = null;
+  }
+  if (!host) {
+    const isPlay = cmd === 'play' || cmd === 'p' || cmd === 'tocar';
+    if (!isPlay) return postBotMessage(room, channel, 'Não tem nada tocando. Use !play <música>.');
+    if (!args) return postBotMessage(room, channel, 'Use: !play <nome da música ou link do YouTube>');
+    if (!socket.data.voiceChannel) return postBotMessage(room, channel, `${socket.data.username}, entre num canal de voz pra eu tocar a música lá.`);
+    if (!socket.data.canPlayMusic) return postBotMessage(room, channel, `${socket.data.username}, seu app está desatualizado -- feche e abra de novo pra atualizar e usar o bot.`);
+    host = { socketId: socket.id, textChannel: channel };
+    roomMusicHosts.set(room, host);
+    console.log(`[musica] ${socket.data.username} virou o DJ (canal de voz "${socket.data.voiceChannel}")`);
+  }
+  host.textChannel = channel;
+  io.to(host.socketId).emit('music-command', { cmd, args, by: socket.data.username });
+}
+
+// Quem era o DJ saiu da chamada ou caiu: a música para junto
+function releaseMusicHost(socket, reason) {
+  const room = socket.data.room;
+  const host = room ? roomMusicHosts.get(room) : null;
+  if (!host || host.socketId !== socket.id) return;
+  roomMusicHosts.delete(room);
+  if (reason) postBotMessage(room, host.textChannel, reason);
+}
+
 function removeFromRoom(socket, room) {
+  if (socket.data.voiceChannel) releaseMusicHost(socket, `🎵 Música parada: ${socket.data.username} (quem estava tocando) saiu.`);
   leaveCurrentVoiceChannel(socket);
   socket.leave(room);
 
@@ -456,7 +534,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', (payload) => {
-    const { username, avatar, ownerToken, userToken } = payload || {};
+    const { username, avatar, ownerToken, userToken, features } = payload || {};
+    // App novo o bastante pra ser o DJ do bot de música
+    socket.data.canPlayMusic = Array.isArray(features) && features.includes('music-bot');
     // Sala única: ignora qualquer nome de sala que o cliente mande
     finishJoin(socket, FIXED_ROOM, { username, avatar, ownerToken, userToken, isNewRoom: false });
   });
@@ -557,7 +637,19 @@ io.on('connection', (socket) => {
     markRoomDirty(room);
 
     io.to(room).emit('chat-message', { channel, message: msg });
+    if (trimmed.startsWith('!')) handleMusicCommand(socket, room, channel, trimmed);
   });
+
+  // Respostas do bot de música -- só o DJ atual pode falar como o bot
+  socket.on('music-bot-say', ({ text } = {}) => {
+    const room = socket.data.room;
+    const host = room ? roomMusicHosts.get(room) : null;
+    if (!host || host.socketId !== socket.id || typeof text !== 'string' || !text.trim()) return;
+    postBotMessage(room, host.textChannel, text.slice(0, 1000));
+  });
+
+  // O DJ terminou a fila (ou deu !stop): libera pra outra pessoa virar DJ
+  socket.on('music-release', () => releaseMusicHost(socket, null));
 
   socket.on('join-voice-channel', ({ channel }) => {
     const room = socket.data.room;
@@ -584,6 +676,7 @@ io.on('connection', (socket) => {
 
   socket.on('leave-voice-channel', () => {
     const room = socket.data.room;
+    releaseMusicHost(socket, `🎵 Música parada: ${socket.data.username} (quem estava tocando) saiu da chamada.`);
     leaveCurrentVoiceChannel(socket);
     if (room) {
       broadcastUserList(room);

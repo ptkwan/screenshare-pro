@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const musicBot = require('./music-bot');
 
 process.on('uncaughtException', (error) => console.error('Erro Crítico:', error));
 process.on('unhandledRejection', (reason) => console.error('Promessa Rejeitada:', reason));
@@ -251,6 +252,9 @@ app.on('window-all-closed', () => {
 ipcMain.on('close-app', () => app.quit());
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// Bot de música (yt-dlp) -- ver music-bot.js
+musicBot.register(ipcMain);
 
 // ==========================================
 // NOTIFICAÇÃO NATIVA DE NOVA MENSAGEM NO CHAT
