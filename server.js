@@ -302,10 +302,12 @@ function broadcastUserList(roomId) {
       voiceChannel,
       muted: !!s?.data.muted,
       deafened: !!s?.data.deafened,
+      musicTrack: !!s?.data.musicTrack,
       isStreaming: voiceChannel ? (broadcasters.get(voiceChannel)?.has(id) || false) : false
     };
   });
   io.to(roomId).emit('update-user-list', users);
+  broadcastMusicBot(roomId); // DJ trocou de canal/saiu: o bot vai junto
 }
 
 function broadcastVoiceChannels(roomId) {
@@ -432,9 +434,10 @@ function handleMusicCommand(socket, room, channel, text) {
     if (!args) return postBotMessage(room, channel, 'Use: !play <nome da música ou link do YouTube>');
     if (!socket.data.voiceChannel) return postBotMessage(room, channel, `${socket.data.username}, entre num canal de voz pra eu tocar a música lá.`);
     if (!socket.data.canPlayMusic) return postBotMessage(room, channel, `${socket.data.username}, seu app está desatualizado -- feche e abra de novo pra atualizar e usar o bot.`);
-    host = { socketId: socket.id, textChannel: channel };
+    host = { socketId: socket.id, textChannel: channel, title: null };
     roomMusicHosts.set(room, host);
     console.log(`[musica] ${socket.data.username} virou o DJ (canal de voz "${socket.data.voiceChannel}")`);
+    broadcastMusicBot(room);
   }
   host.textChannel = channel;
   io.to(host.socketId).emit('music-command', { cmd, args, by: socket.data.username });
@@ -447,6 +450,19 @@ function releaseMusicHost(socket, reason) {
   if (!host || host.socketId !== socket.id) return;
   roomMusicHosts.delete(room);
   if (reason) postBotMessage(room, host.textChannel, reason);
+  broadcastMusicBot(room);
+}
+
+// O bot aparece como participante no canal de voz de quem está tocando
+// (clique direito nele: volume só pra você / desconectar o bot)
+function musicBotState(room) {
+  const host = roomMusicHosts.get(room);
+  const s = host ? io.sockets.sockets.get(host.socketId) : null;
+  if (!s || !s.data.voiceChannel) return null;
+  return { id: MUSIC_BOT_ID, name: MUSIC_BOT_NAME, voiceChannel: s.data.voiceChannel, hostId: s.id, title: host.title || null };
+}
+function broadcastMusicBot(room) {
+  io.to(room).emit('music-bot-state', musicBotState(room));
 }
 
 function removeFromRoom(socket, room) {
@@ -537,6 +553,8 @@ io.on('connection', (socket) => {
     const { username, avatar, ownerToken, userToken, features } = payload || {};
     // App novo o bastante pra ser o DJ do bot de música
     socket.data.canPlayMusic = Array.isArray(features) && features.includes('music-bot');
+    // App que recebe a música num canal de áudio próprio (volume só do bot)
+    socket.data.musicTrack = Array.isArray(features) && features.includes('music-track');
     // Sala única: ignora qualquer nome de sala que o cliente mande
     finishJoin(socket, FIXED_ROOM, { username, avatar, ownerToken, userToken, isNewRoom: false });
   });
@@ -650,6 +668,26 @@ io.on('connection', (socket) => {
 
   // O DJ terminou a fila (ou deu !stop): libera pra outra pessoa virar DJ
   socket.on('music-release', () => releaseMusicHost(socket, null));
+
+  // O DJ avisa o que está tocando (aparece embaixo do bot no canal de voz)
+  socket.on('music-now-playing', ({ title } = {}) => {
+    const room = socket.data.room;
+    const host = room ? roomMusicHosts.get(room) : null;
+    if (!host || host.socketId !== socket.id) return;
+    host.title = typeof title === 'string' ? title.slice(0, 200) : null;
+    broadcastMusicBot(room);
+  });
+
+  // "Desconectar" o bot (clique direito nele no canal de voz), igual ao Discord
+  socket.on('music-bot-disconnect', () => {
+    const room = socket.data.room;
+    const host = room ? roomMusicHosts.get(room) : null;
+    if (!host) return;
+    io.to(host.socketId).emit('music-command', { cmd: 'disconnect', args: '', by: socket.data.username });
+    const hostSocket = io.sockets.sockets.get(host.socketId);
+    if (hostSocket) releaseMusicHost(hostSocket, `👋 ${socket.data.username} desconectou o ${MUSIC_BOT_NAME}.`);
+    else { roomMusicHosts.delete(room); broadcastMusicBot(room); }
+  });
 
   socket.on('join-voice-channel', ({ channel }) => {
     const room = socket.data.room;

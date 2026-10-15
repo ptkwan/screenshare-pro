@@ -138,6 +138,8 @@
         .chat-message .cm-time { font-size: 12px; color: #949ba4; }
         .chat-message .cm-text { font-size: 16px; line-height: 1.375; color: #dbdee1; white-space: pre-wrap; word-break: break-word; }
         .cm-bot-avatar { width: 40px; height: 40px; border-radius: 9999px; background: #5865f2; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .music-bot-avatar { border-radius: 9999px; background: #5865f2; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .vm-bot-title { display: block; font-size: 11px; color: #949ba4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cm-bot-tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; line-height: 15px; padding: 0 4px; border-radius: 3px; margin: 0 6px 0 4px; align-self: center; }
         .chat-message .cm-image { max-width: 320px; max-height: 320px; margin-top: 4px; border-radius: 8px; border: 1px solid #35373c; cursor: zoom-in; display: block; object-fit: contain; background: #1e1f22; transition: border-color 0.15s ease; }
         .chat-message .cm-image:hover { border-color: #4e5058; }
@@ -974,6 +976,17 @@
             // ==========================================
             const voicePeers = {}; // peerId -> RTCPeerConnection (mic bidirecional)
             const userVolumes = {}; // peerId -> multiplicador de volume (1.0 = 100%, ate 2.0 = 200%)
+            const MUSIC_MAX_QUEUE = 25;
+            const MUSIC_SEND_LEVEL = 1.0; // no !volume 100; o padrão (50) fica abaixo da voz
+            const MUSIC_BOT_ID = 'music-bot';
+            const music = {
+                ctx: null, out: null, sendGain: null, localGain: null, // AudioContext da música, saída pra chamada, saída pros fones
+                audioEl: null, elSource: null, current: null, queue: [],
+                volume: 50, resolving: 0, gen: 0, preparingAnnounced: false,
+            };
+            let musicBotState = null; // { voiceChannel, hostId, title } -- onde o bot está agora (vem do servidor)
+            const musicListenGains = {}; // peerId -> GainNode da música que chega de cada um
+            try { const v = parseFloat(localStorage.getItem('ssp-music-bot-volume')); if (Number.isFinite(v)) userVolumes[MUSIC_BOT_ID] = v; } catch (e) { /* ignora */ }
             const gainNodes = {}; // peerId -> GainNode (permite passar de 100%, o <audio> sozinho nao consegue)
             let micStream = null; // stream cru do getUserMedia (só a supressão nativa do Chromium)
             let outgoingVoiceStream = null; // o que É de fato mandado pros peers -- micStream processado pelo RNNoise, com fallback pro cru se o denoiser falhar
@@ -1373,8 +1386,8 @@
                 if (!window.RnnoiseWorkletNode || !window.loadRnnoise) {
                     // Vendor não carregou por algum motivo -- não trava o chat de voz
                     // por causa disso, só segue sem a segunda passada de supressão.
-                    outgoingVoiceStream = buildPlainOutgoing(raw);
-                    return outgoingVoiceStream;
+                    outgoingVoiceStream = raw;
+                    return raw;
                 }
 
                 try {
@@ -1404,7 +1417,6 @@
                     const rnnoise = new window.RnnoiseWorkletNode(denoiseCtx, { maxChannels: 1, wasmBinary });
                     const dest = denoiseCtx.createMediaStreamDestination();
                     source.connect(rumbleFilter).connect(rnnoise).connect(dest);
-                    connectMusicBus(denoiseCtx, dest);
 
                     outgoingVoiceStream = dest.stream;
                     console.log('[rnnoise] supressão de ruído ativa no microfone');
@@ -1415,24 +1427,7 @@
                     // cai pro stream cru, só sem a segunda passada de supressão.
                     console.error('[rnnoise] falha ao iniciar supressão de ruído:', err);
                     reportLog('error', `Falha ao iniciar supressão de ruído: ${err.message || err}`);
-                    outgoingVoiceStream = buildPlainOutgoing(raw);
-                    return outgoingVoiceStream;
-                }
-            }
-
-            // Sem RNNoise: ainda passa o microfone por um AudioContext (sem filtro
-            // nenhum) só pra ter onde misturar a música do bot. Se nem isso der,
-            // manda o microfone cru, como sempre foi.
-            function buildPlainOutgoing(raw) {
-                try {
-                    if (denoiseCtx) { try { denoiseCtx.close(); } catch (e) { /* ignora */ } }
-                    denoiseCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                    const dest = denoiseCtx.createMediaStreamDestination();
-                    denoiseCtx.createMediaStreamSource(raw).connect(dest);
-                    connectMusicBus(denoiseCtx, dest);
-                    return dest.stream;
-                } catch (e) {
-                    denoiseCtx = null;
+                    outgoingVoiceStream = raw;
                     return raw;
                 }
             }
@@ -1467,8 +1462,21 @@
                 } else {
                     pc.addTransceiver('audio', { direction: 'recvonly' });
                 }
+                // Segundo canal de áudio, só da música do bot (mudo quando não sou o
+                // DJ) -- assim cada um ajusta o volume do bot separado da voz de quem
+                // está tocando. Só com quem tem app novo o bastante: os dois lados
+                // decidem igual (cada um olha a lista do outro), então as conexões
+                // sempre combinam. Fica na posição 2 (mid '1') da conexão.
+                const peerHasMusicTrack = !!findUser(peerId)?.musicTrack;
+                if (peerHasMusicTrack) {
+                    ensureMusicCtx();
+                    pc.addTrack(music.out.stream.getAudioTracks()[0], music.out.stream);
+                }
 
-                pc.ontrack = (e) => attachVoiceAudio(peerId, e.streams[0]);
+                pc.ontrack = (e) => {
+                    if (peerHasMusicTrack && e.transceiver?.mid === '1') attachMusicAudio(peerId, e.streams[0] || new MediaStream([e.track]));
+                    else attachVoiceAudio(peerId, e.streams[0]);
+                };
 
                 // Mesmo log de estado ICE que já existe pro compartilhamento de tela
                 // (foi assim que o problema do binonha foi diagnosticado) -- faltava
@@ -1548,6 +1556,7 @@
             }
 
             function removeVoiceAudio(peerId) {
+                removeMusicAudio(peerId);
                 const audioEl = document.querySelector(`audio[data-voice-id="${peerId}"]`);
                 if (audioEl) audioEl.remove();
                 if (gainNodes[peerId]) {
@@ -1646,6 +1655,7 @@
                 volumeMenuPeerId = peerId;
                 volumeMenuPeerName = peerName;
                 volumeMenuPeerIsAdmin = !!isPeerAdmin;
+                document.getElementById('user-volume-menu-profile').classList.remove('hidden');
                 document.getElementById('user-volume-menu-name').textContent = 'Volume do usuário';
                 document.getElementById('user-volume-menu-kick').textContent = `Expulsar ${peerName}`;
                 const pct = Math.round((userVolumes[peerId] ?? 1.0) * 100);
@@ -1672,6 +1682,11 @@
 
             document.getElementById('user-volume-menu-kick').addEventListener('click', () => {
                 if (!volumeMenuPeerId) return;
+                if (volumeMenuPeerId === MUSIC_BOT_ID) {
+                    closeUserVolumeMenu();
+                    socket.emit('music-bot-disconnect');
+                    return;
+                }
                 const name = volumeMenuPeerName || 'esse participante';
                 const peerId = volumeMenuPeerId;
                 closeUserVolumeMenu();
@@ -1703,6 +1718,11 @@
                 const pct = Number(userVolumeSlider.value);
                 userVolumeValue.textContent = pct + '%';
                 userVolumes[volumeMenuPeerId] = pct / 100;
+                if (volumeMenuPeerId === MUSIC_BOT_ID) {
+                    applyMusicVolume();
+                    try { localStorage.setItem('ssp-music-bot-volume', String(pct / 100)); } catch (e) { /* ignora */ }
+                    return;
+                }
                 applyGainForUser(volumeMenuPeerId);
             });
 
@@ -2008,6 +2028,20 @@
                         if (!isSelf) attachVolumeContextMenu(row, m.id, m.name, m.isAdmin);
                         voiceList.appendChild(row);
                     });
+
+                    if (musicBotState && musicBotState.voiceChannel === ch) {
+                        const row = document.createElement('div');
+                        row.className = 'voice-member-row';
+                        row.title = 'Clique direito: volume do bot / desconectar';
+                        row.innerHTML = `
+                            ${MUSIC_BOT_AVATAR_HTML('w-6 h-6 text-sm')}
+                            <span class="vm-name">DJ Quartonha<span class="vm-bot-title">${escapeHtml(musicBotState.title || 'preparando...')}</span></span>
+                            <span class="vm-icons"><span class="cm-bot-tag">BOT</span></span>
+                        `;
+                        row.addEventListener('click', (e) => { e.stopPropagation(); openMusicBotMenu(e.clientX + 8, e.clientY); });
+                        attachMusicBotMenu(row);
+                        voiceList.appendChild(row);
+                    }
                 });
 
                 const statusBar = document.getElementById('voice-status-bar');
@@ -2130,6 +2164,17 @@
                     if (!isMe) attachVolumeContextMenu(tile, u.id, u.name, u.isAdmin);
                     strip.appendChild(tile);
                 });
+                if (musicBotState && musicBotState.voiceChannel === myVoiceChannel) {
+                    const tile = document.createElement('div');
+                    tile.className = 'voice-tile';
+                    tile.title = 'Clique direito: volume do bot / desconectar';
+                    tile.innerHTML = `
+                        <div class="tile-avatar">${MUSIC_BOT_AVATAR_HTML('w-20 h-20 text-4xl')}</div>
+                        <div class="voice-tile-label"><span class="truncate">🎵 ${escapeHtml(musicBotState.title || 'DJ Quartonha')}</span></div>
+                    `;
+                    attachMusicBotMenu(tile);
+                    strip.appendChild(tile);
+                }
                 layoutVoiceTiles();
             }
 
@@ -3402,7 +3447,7 @@
                     return;
                 }
                 const ownerToken = localStorage.getItem('ssp-owner-token-Quartonha') || null;
-                socket.emit('join-room', { username: myUsername, avatar: myAvatar, ownerToken, userToken: getUserToken(), features: ['music-bot'] });
+                socket.emit('join-room', { username: myUsername, avatar: myAvatar, ownerToken, userToken: getUserToken(), features: ['music-bot', 'music-track'] });
             }
 
             function showConnectForm() {
@@ -3867,53 +3912,59 @@
             // Quem dá o primeiro !play estando em chamada vira o DJ: o servidor
             // repassa pra cá os comandos do chat de todo mundo ('music-command'),
             // o áudio é baixado pelo yt-dlp no processo principal (music-bot.js) e
-            // toca num AudioContext próprio. De lá vai pra dois lugares: pros seus
-            // fones (respeitando o mudo/volume geral e o dispositivo de saída) e pro
-            // "music bus" -- misturado no áudio que você já manda pra chamada,
-            // DEPOIS do RNNoise (que estragaria a música) e fora do mudo do
-            // microfone (mutar o mic não corta a música pros outros).
-            const MUSIC_MAX_QUEUE = 25;
-            const MUSIC_SEND_LEVEL = 0.7; // no volume 100; no padrão (50) a música fica bem abaixo da voz
-            const music = {
-                ctx: null, out: null, localGain: null, // AudioContext da música, saída pra chamada, saída pros fones
-                sendBus: null, sendSource: null,       // entrada da música no grafo do microfone
-                audioEl: null, elSource: null, current: null, queue: [],
-                volume: 50, resolving: 0, gen: 0, preparingAnnounced: false,
-            };
+            // toca num AudioContext próprio. De lá vai pros seus fones e pro
+            // segundo canal de áudio de cada conexão de voz (createVoicePeer) --
+            // separado da sua voz: mutar o mic não corta a música, e cada um ajusta
+            // o volume do bot sozinho (clique direito no DJ Quartonha na chamada).
 
             function ensureMusicCtx() {
                 if (music.ctx) return music.ctx;
                 const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                 music.ctx = ctx;
                 music.out = ctx.createMediaStreamDestination();
+                music.sendGain = ctx.createGain();
+                music.sendGain.connect(music.out);
                 music.localGain = ctx.createGain();
                 music.localGain.connect(ctx.destination);
                 if (outputDeviceId !== 'default' && typeof ctx.setSinkId === 'function') ctx.setSinkId(outputDeviceId).catch(() => {});
                 applyMusicVolume();
-                attachMusicToSendBus();
                 return ctx;
             }
 
-            // Chamado toda vez que o grafo de saída do microfone é (re)montado
-            // (entrar na chamada, trocar de microfone)
-            function connectMusicBus(ctx, dest) {
-                music.sendBus = ctx.createGain();
-                music.sendBus.connect(dest);
-                music.sendSource = null;
-                applyMusicVolume();
-                attachMusicToSendBus();
-            }
-            function attachMusicToSendBus() {
-                if (!music.sendBus || !music.out || music.sendSource) return;
-                try {
-                    music.sendSource = music.sendBus.context.createMediaStreamSource(music.out.stream);
-                    music.sendSource.connect(music.sendBus);
-                } catch (e) { music.sendSource = null; }
-            }
+            // !volume (vale pra todo mundo) x volume do bot no clique direito (só
+            // pra você) x mudo/volume geral do seu áudio
             function applyMusicVolume() {
                 const level = music.volume / 100;
-                if (music.sendBus) music.sendBus.gain.value = level * MUSIC_SEND_LEVEL;
-                if (music.localGain) music.localGain.gain.value = isMuted ? 0 : level * masterVolume;
+                const mine = (userVolumes[MUSIC_BOT_ID] ?? 1.0) * masterVolume;
+                if (music.sendGain) music.sendGain.gain.value = level * MUSIC_SEND_LEVEL;
+                if (music.localGain) music.localGain.gain.value = isMuted ? 0 : level * MUSIC_SEND_LEVEL * mine;
+                Object.values(musicListenGains).forEach(g => { g.gain.value = isMuted ? 0 : mine; });
+            }
+
+            // Música que chega de outra pessoa (o DJ) no segundo canal de áudio
+            function attachMusicAudio(peerId, stream) {
+                removeMusicAudio(peerId);
+                const audioEl = document.createElement('audio');
+                audioEl.dataset.musicId = peerId;
+                audioEl.autoplay = true;
+                audioEl.muted = true; // só mantém o stream decodificando; o som sai pelo GainNode
+                audioEl.srcObject = stream;
+                document.getElementById('voice-audio-container').appendChild(audioEl);
+                audioEl.play().catch(() => {});
+                try {
+                    const ctx = getAudioCtx();
+                    const gain = ctx.createGain();
+                    ctx.createMediaStreamSource(stream).connect(gain).connect(ctx.destination);
+                    musicListenGains[peerId] = gain;
+                    applyMusicVolume();
+                } catch (e) { /* sem Web Audio, sem música */ }
+            }
+            function removeMusicAudio(peerId) {
+                document.querySelector(`audio[data-music-id="${peerId}"]`)?.remove();
+                if (musicListenGains[peerId]) {
+                    try { musicListenGains[peerId].disconnect(); } catch (e) { /* ignora */ }
+                    delete musicListenGains[peerId];
+                }
             }
 
             function musicSay(text) {
@@ -3964,7 +4015,7 @@
                 el.src = URL.createObjectURL(new Blob([next.data], { type: next.mime }));
                 next.data = null; // o Blob já guarda os bytes
                 music.elSource = ctx.createMediaElementSource(el);
-                music.elSource.connect(music.out);
+                music.elSource.connect(music.sendGain);
                 music.elSource.connect(music.localGain);
                 music.audioEl = el;
                 music.current = next;
@@ -3978,6 +4029,7 @@
                 try {
                     await el.play();
                     musicSay(`▶️ Tocando agora: ${next.title} [${formatDuration(next.duration)}] -- pedido por ${next.by}`);
+                    socket.emit('music-now-playing', { title: next.title });
                 } catch (e) {
                     if (music.audioEl === el) el.onerror();
                 }
@@ -4024,9 +4076,35 @@
                 else musicSay(`➕ Na fila (#${music.queue.length}): ${item.title} [${formatDuration(item.duration)}] -- pedido por ${by}`);
             }
 
+            socket.on('music-bot-state', (state) => {
+                musicBotState = state;
+                renderChannelSidebar();
+                if (viewingType === 'voice') renderVoiceMemberStrip();
+            });
+
+            const MUSIC_BOT_AVATAR_HTML = (size) => `<div class="music-bot-avatar ${size}"><i class="ph-fill ph-music-notes"></i></div>`;
+            function openMusicBotMenu(x, y) {
+                openUserVolumeMenu(MUSIC_BOT_ID, 'DJ Quartonha', false, x, y);
+                document.getElementById('user-volume-menu-name').textContent = 'Volume do bot (só pra você)';
+                document.getElementById('user-volume-menu-profile').classList.add('hidden');
+                document.getElementById('user-volume-menu-admin').classList.add('hidden');
+                const kick = document.getElementById('user-volume-menu-kick');
+                kick.textContent = 'Desconectar DJ Quartonha';
+                kick.closest('div').classList.remove('hidden');
+            }
+            function attachMusicBotMenu(el) {
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openMusicBotMenu(e.clientX, e.clientY);
+                });
+            }
+
             socket.on('music-command', ({ cmd, args, by } = {}) => {
                 const el = music.audioEl;
                 switch (cmd) {
+                    case 'disconnect': // alguém desconectou o bot pelo clique direito (o servidor já avisou no chat)
+                        return musicStopAll();
                     case 'play': case 'p': case 'tocar':
                         if (!args) return musicSay('Use: !play <nome da música ou link do YouTube>');
                         return musicEnqueue(args, by);
